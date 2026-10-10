@@ -1,0 +1,14 @@
+{
+  "name": "@tradeos/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/decimal.ts",
+    "./validation": "./src/validation.ts"
+  },
+  "dependencies": {
+    "decimal.js": "10.6.0",
+    "zod": "4.6.5"
+  }
+}

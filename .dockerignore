@@ -9,3 +9,8 @@ data
 test-results
 playwright-report
 .impeccable
+
+.tools
+artifacts
+apps/android
+**/node_modules

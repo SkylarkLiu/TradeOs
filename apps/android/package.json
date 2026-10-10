@@ -1,0 +1,37 @@
+{
+  "name": "tradeos-android-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 3200",
+    "build": "tsc --noEmit && vite build",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "sync": "npm run build && cap sync android",
+    "apk": "node scripts/build-apk.mjs"
+  },
+  "dependencies": {
+    "@capacitor/core": "8.5.3",
+    "@capacitor/android": "8.5.3",
+    "@capacitor-community/sqlite": "8.1.1",
+    "@tradeos/core": "file:../../packages/core",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "sql.js": "1.14.2",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3",
+    "@vitejs/plugin-react": "6.1.2",
+    "vite": "8.3.4",
+    "typescript": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@types/sql.js": "latest",
+    "@types/better-sqlite3": "latest",
+    "vitest": "5.0.3",
+    "@playwright/test": "latest"
+  }
+}

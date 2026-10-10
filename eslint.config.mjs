@@ -9,6 +9,13 @@ export default defineConfig([
     ".next-e2e/**",
     "generated/**",
     "data/**",
+    ".tools/**",
+    "artifacts/**",
     "next-env.d.ts",
+    "apps/android/android/**",
+    "apps/android/node_modules/**",
+    "apps/android/dist/**",
+    "apps/android/test-results/**",
+    "packages/core/node_modules/**",
   ]),
 ]);

@@ -10,3 +10,13 @@ test-results/
 
 .next-e2e/
 next-env.d.ts
+
+.tools/
+artifacts/
+apps/android/dist/
+apps/android/android/.gradle/
+apps/android/android/local.properties
+apps/android/android/**/build/
+apps/android/android/app/src/main/assets/public/
+apps/android/android/app/src/main/assets/capacitor.config.json
+apps/android/android/app/src/main/assets/capacitor.plugins.json
