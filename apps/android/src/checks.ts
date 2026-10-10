@@ -16,6 +16,9 @@ export async function runChecks() {
   try {
     await ledger.init();
     await db.batch([
+      ...["AssetLedger", "AssetHolding", "AssetPrice", "Asset"].map(
+        (table) => ({ statement: `DELETE FROM ${table}`, values: [] }),
+      ),
       { statement: "DELETE FROM CashLedger", values: [] },
       { statement: "DELETE FROM FinancialAccount", values: [] },
     ]);
@@ -101,6 +104,59 @@ export async function runChecks() {
     check(
       s.accounts[0].balance === "100000000000000000.00000003",
       "关闭连接后重新打开仍保留数据",
+    );
+    const legacyPayload = {
+      createdAt: new Date().toISOString(),
+      accounts: s.accounts,
+      entries: s.entries,
+    };
+    const legacy = {
+      kind: "tradeos-android-prototype",
+      version: 1,
+      payload: legacyPayload,
+      checksum: await digest(legacyPayload),
+    };
+    const asset = await ledger.createAsset({
+      code: "VERIFY",
+      name: "独立股票检查",
+      currency: "CNY",
+      assetClass: "STOCK",
+    });
+    await ledger.postAsset({
+      accountId: a.id,
+      assetId: asset.id,
+      type: "BUY",
+      quantity: "2",
+      price: "10",
+      fee: "1",
+      at: "2020-01-03T00:00:00Z",
+    });
+    await ledger.postAsset({
+      accountId: a.id,
+      assetId: asset.id,
+      type: "SELL",
+      quantity: "1",
+      price: "15",
+      fee: "1",
+      at: "2020-01-04T00:00:00Z",
+    });
+    const current = await ledger.state();
+    check(
+      current.holdings[0].quantity === "1" &&
+        current.holdings[0].cost === "10.5" &&
+        current.holdings[0].realized === "3.5",
+      "现货买卖、成本和损益一致",
+    );
+    const assetBackup = await ledger.backup();
+    await ledger.restore(assetBackup);
+    check((await ledger.state()).assetEntries.length === 2, "资产完整备份恢复");
+    await ledger.restore(legacy);
+    const upgraded = await ledger.state();
+    check(
+      upgraded.accounts[0].balance === s.accounts[0].balance &&
+        !upgraded.assetEntries.length &&
+        !upgraded.assets.length,
+      "旧版备份兼容升级",
     );
     return checks;
   } finally {

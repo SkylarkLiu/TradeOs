@@ -33,9 +33,12 @@ execFileSync(
   [":app:assembleDebug", "--console=plain"],
   { cwd: path.join(app, "android"), env, stdio: "inherit" },
 );
+const version = JSON.parse(
+  readFileSync(path.join(app, "package.json"), "utf8"),
+).version;
 const target = path.join(
   root,
-  "artifacts/android/TradeOS-offline-prototype-0.1.0.apk",
+  `artifacts/android/TradeOS-offline-prototype-${version}.apk`,
 );
 mkdirSync(path.dirname(target), { recursive: true });
 copyFileSync(

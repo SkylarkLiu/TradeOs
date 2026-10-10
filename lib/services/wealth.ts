@@ -14,33 +14,15 @@ import {
   date,
   positive,
   nonnegative,
-  decimal,
 } from "@/lib/validation/common";
 export type Tx = Prisma.TransactionClient;
-export const transactionSchema = z.object({
-  accountId: id,
-  assetId: id,
-  type: z.enum([
-    "BUY",
-    "SELL",
-    "DEPOSIT",
-    "WITHDRAWAL",
-    "DIVIDEND",
-    "INTEREST",
-    "FEE",
-    "ADJUSTMENT",
-  ]),
-  quantity: decimal,
-  price: nonnegative.default("0"),
-  fee: nonnegative.default("0"),
-  at: date,
-  note: z.string().max(3000).default(""),
-  externalId: id.optional(),
-  purpose: z
-    .enum(["LONG_TERM", "TRADING", "CASH_RESERVE", "OTHER"])
-    .default("LONG_TERM"),
-});
-export type LedgerInput = z.output<typeof transactionSchema>;
+import {
+  transactionSchema,
+  spotLedgerChanges,
+  type LedgerInput,
+} from "../../packages/core/src/spot-ledger";
+export { transactionSchema };
+export type { LedgerInput };
 export const audit = (
   tx: Tx,
   action: string,
@@ -136,46 +118,16 @@ export async function postLedger(tx: Tx, input: LedgerInput) {
   if (asset.instrument !== "SPOT") throw new Error("合约成交请从交易日志录入");
   await chronology(tx, account.id, input.at);
   if (input.at > new Date()) throw new Error("真实流水不能记录未来时间");
-  const isCash = asset.assetClass === "CASH",
-    q = D(input.quantity),
-    fee = D(input.fee),
-    price = isCash ? D(1) : D(input.price);
-  if (q.eq(0) || (input.type !== "ADJUSTMENT" && q.lt(0)))
-    throw new Error("数量必须大于零；调整允许负数");
-  if (!isCash && price.lte(0))
-    throw new Error("非现金流水需要有效成交或估值价格");
-  if (isCash && ["BUY", "SELL"].includes(input.type))
-    throw new Error("现金请使用存入、取出或调整");
-  if (input.type === "FEE" && !isCash) throw new Error("费用应使用现金资产");
-  if (input.type === "FEE" && fee.gt(0))
-    throw new Error("费用流水数量即费用金额，不应重复填写手续费");
-  const b = await balance(tx, account.id, asset.id),
-    oldQ = D(b.quantity),
-    avg = oldQ.gt(0) ? D(b.cost).div(oldQ) : D(0);
-  let delta = q,
-    cost = q.mul(price),
-    realized = D(0),
-    cashDelta = D(0);
-  if (
-    ["SELL", "WITHDRAWAL", "FEE"].includes(input.type) ||
-    (input.type === "ADJUSTMENT" && q.lt(0))
-  ) {
-    delta = input.type === "ADJUSTMENT" ? q : q.neg();
-    cost = avg.mul(delta);
-  }
-  if (input.type === "BUY") {
-    cost = cost.plus(fee);
-    cashDelta = q.mul(price).plus(fee).neg();
-  } else if (input.type === "SELL") {
-    cashDelta = q.mul(price).minus(fee);
-    realized = q.mul(price).minus(avg.mul(q)).minus(fee);
-  } else if (!isCash) {
-    cashDelta = fee.neg();
-  } else {
-    delta = delta.minus(fee);
-    cost = delta;
-    cashDelta = delta;
-  }
+  const isCash = asset.assetClass === "CASH";
+  const b = await balance(tx, account.id, asset.id);
+  const changes = spotLedgerChanges(input, isCash, b);
+  const q = D(input.quantity),
+    price = D(changes.price),
+    fee = D(changes.fee),
+    delta = D(changes.quantity),
+    cost = D(changes.costDelta),
+    realized = D(changes.realizedDelta),
+    cashDelta = D(changes.cashDelta);
   await setBalance(
     tx,
     account.id,

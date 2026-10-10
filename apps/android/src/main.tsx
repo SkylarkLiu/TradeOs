@@ -8,6 +8,8 @@ import { openSql } from "./sql";
 import { exportJson, importJson, saveBefore, readBefore } from "./files";
 import { runChecks } from "./checks";
 import "./style.css";
+import { emptyAssets } from "./assets";
+import { AssetsView } from "./assets-view";
 const localNow = () =>
   new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
     .toISOString()
@@ -30,7 +32,11 @@ const message = (e: unknown) =>
         : "操作失败";
 let app: Ledger;
 function App() {
-  const [state, setState] = useState<State>({ accounts: [], entries: [] }),
+  const [state, setState] = useState<State>({
+      accounts: [],
+      entries: [],
+      ...emptyAssets(),
+    }),
     [ready, setReady] = useState(false),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState(""),
@@ -100,7 +106,7 @@ function App() {
         </span>
       </header>
       <nav aria-label="工作台">
-        {["账本", "预测", "备份", "离线检查"].map((t) => (
+        {["账本", "资产", "预测", "备份", "离线检查"].map((t) => (
           <button
             key={t}
             aria-current={tab === t ? "page" : undefined}
@@ -112,8 +118,8 @@ function App() {
       </nav>
       <main>
         <p className="scope">
-          安卓迁移第一阶段 ·
-          现金账本、精度与文件验证。与电脑正式账本独立，尚未开放股票、真实交易和Web备份迁移。
+          安卓离线资产版 0.2.0 ·
+          现金与现货持仓共用账本。策略交易、回测、复盘及电脑备份迁移仍在后续阶段。
         </p>
         {error && (
           <p className="error" role="alert">
@@ -305,7 +311,7 @@ function App() {
                   {!state.accounts.length && <p className="empty">暂无账户</p>}
                 </section>
                 <section>
-                  <h2>最近50条流水</h2>
+                  <h2>最近50条现金流水</h2>
                   <div
                     className="table"
                     tabIndex={0}
@@ -366,6 +372,15 @@ function App() {
                   </div>
                 </section>
               </>
+            )}
+            {tab === "资产" && (
+              <AssetsView
+                state={state}
+                ledger={app}
+                busy={busy}
+                act={act}
+                notice={setNotice}
+              />
             )}
             {tab === "预测" && (
               <>
@@ -532,8 +547,11 @@ function App() {
                   {pending && (
                     <>
                       <p>
-                        账户 {pending.payload.accounts.length} 个 · 流水{" "}
-                        {pending.payload.entries.length} 条
+                        账户 {pending.payload.accounts.length} 个 · 现金流水{" "}
+                        {pending.payload.entries.length} 条 · 资产{" "}
+                        {pending.payload.assets.length} 项 · 资产流水{" "}
+                        {pending.payload.assetEntries.length} 条 · 报价{" "}
+                        {pending.payload.prices.length} 条
                       </p>
                       <label className="check">
                         <input

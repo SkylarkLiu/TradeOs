@@ -9,6 +9,24 @@ import {
   id,
 } from "@tradeos/core/validation";
 import type { Sql, Statement } from "./sql";
+import {
+  transactionSchema,
+  spotLedgerChanges,
+} from "@tradeos/core/spot-ledger";
+import { positive } from "@tradeos/core/validation";
+import {
+  assetTables,
+  assetSchema,
+  holdingSchema,
+  assetEntrySchema,
+  priceSchema,
+  assetStateSchema,
+  emptyAssets,
+  insertRow,
+  updatedHolding,
+  type AssetState,
+  type Holding,
+} from "./assets";
 export const accountSchema = z.object({
   id,
   name: text,
@@ -30,7 +48,7 @@ export const entrySchema = z.object({
 });
 export type Account = z.infer<typeof accountSchema>;
 export type Entry = z.infer<typeof entrySchema>;
-export type State = { accounts: Account[]; entries: Entry[] };
+export type State = { accounts: Account[]; entries: Entry[] } & AssetState;
 const schema = [
   `CREATE TABLE IF NOT EXISTS FinancialAccount(id TEXT PRIMARY KEY,name TEXT NOT NULL,platform TEXT NOT NULL,currency TEXT NOT NULL,balance TEXT NOT NULL DEFAULT '0',sequence INTEGER NOT NULL DEFAULT 0,UNIQUE(platform,name,currency));`,
   `CREATE TABLE IF NOT EXISTS CashLedger(id TEXT PRIMARY KEY,accountId TEXT NOT NULL REFERENCES FinancialAccount(id) ON DELETE RESTRICT,type TEXT NOT NULL,amount TEXT NOT NULL,fee TEXT NOT NULL,delta TEXT NOT NULL,at TEXT NOT NULL,sequence INTEGER NOT NULL,note TEXT NOT NULL,UNIQUE(accountId,sequence));`,
@@ -73,29 +91,61 @@ export async function validateBackup(raw: unknown) {
     throw new Error(
       "当前样机只支持离线样机备份，电脑正式账本迁移将在后续版本开放。",
     );
+  const basePayload = z.object({
+    createdAt: date.transform((d) => d.toISOString()),
+    accounts: z.array(accountSchema).max(1000),
+    entries: z.array(entrySchema).max(100000),
+  });
   const file = z
-    .object({
-      kind: z.literal("tradeos-android-prototype"),
-      version: z.literal(1),
-      payload: z.object({
-        createdAt: date.transform((d) => d.toISOString()),
-        accounts: z.array(accountSchema).max(1000),
-        entries: z.array(entrySchema).max(100000),
+    .discriminatedUnion("version", [
+      z.object({
+        kind: z.literal("tradeos-android-prototype"),
+        version: z.literal(1),
+        payload: basePayload,
+        checksum: z.string().regex(/^[a-f0-9]{64}$/),
       }),
-      checksum: z.string().regex(/^[a-f0-9]{64}$/),
-    })
+      z.object({
+        kind: z.literal("tradeos-android-prototype"),
+        version: z.literal(2),
+        payload: basePayload.extend(assetStateSchema.shape),
+        checksum: z.string().regex(/^[a-f0-9]{64}$/),
+      }),
+    ])
     .parse(raw);
-  if ((await digest(file.payload)) !== file.checksum)
+  if (
+    (await digest(z.object({ payload: z.unknown() }).parse(raw).payload)) !==
+    file.checksum
+  )
     throw new Error("备份校验和不一致");
-  const ids = new Set<string>();
-  const entryIds = new Set<string>();
-  for (const a of file.payload.accounts) {
-    if (ids.has(a.id)) throw new Error("备份账户ID重复");
-    ids.add(a.id);
+  const payload = { ...emptyAssets(), ...file.payload };
+  const accountIds = new Set(payload.accounts.map((a) => a.id));
+  const assetIds = new Set(payload.assets.map((a) => a.id));
+  const accountKeys = new Set(
+    payload.accounts.map((a) =>
+      JSON.stringify([a.platform, a.name, a.currency]),
+    ),
+  );
+  if (
+    accountIds.size !== payload.accounts.length ||
+    accountKeys.size !== payload.accounts.length
+  )
+    throw new Error("备份账户重复");
+  if (
+    assetIds.size !== payload.assets.length ||
+    new Set(payload.assets.map((a) => a.code)).size !== payload.assets.length
+  )
+    throw new Error("备份资产重复");
+  const entries = [...payload.entries, ...payload.assetEntries];
+  if (new Set(entries.map((e) => e.id)).size !== entries.length)
+    throw new Error("备份流水ID重复");
+  if (entries.some((e) => !accountIds.has(e.accountId)))
+    throw new Error("备份关联账户不存在");
+  const replayHoldings = new Map<string, Holding>();
+  for (const a of payload.accounts) {
     let balance = D(0),
       sequence = 0,
       last = "";
-    for (const e of file.payload.entries
+    for (const e of entries
       .filter((e) => e.accountId === a.id)
       .sort((a, b) => a.sequence - b.sequence)) {
       if (
@@ -104,25 +154,81 @@ export async function validateBackup(raw: unknown) {
         new Date(e.at) > new Date()
       )
         throw new Error("备份流水顺序或时间无效");
-      const q = D(e.amount);
-      if (q.eq(0) || (e.type !== "ADJUSTMENT" && q.lte(0)))
-        throw new Error("备份流水数量无效");
-      const expected = (e.type === "WITHDRAWAL" ? q.neg() : q).minus(e.fee);
-      if (!expected.eq(e.delta)) throw new Error("备份流水净额不一致");
-      balance = balance.plus(e.delta);
+      if ("assetId" in e) {
+        const asset = payload.assets.find((a) => a.id === e.assetId);
+        if (!asset || asset.currency !== a.currency)
+          throw new Error("备份资产不存在或结算币种不一致");
+        const key = JSON.stringify([a.id, asset.id]);
+        const old = replayHoldings.get(key) ?? {
+          accountId: a.id,
+          assetId: asset.id,
+          quantity: "0",
+          cost: "0",
+          realized: "0",
+        };
+        const changes = spotLedgerChanges(
+          transactionSchema.parse(e),
+          false,
+          old,
+        );
+        for (const [saved, expected] of [
+          [e.quantityDelta, changes.quantity],
+          [e.cashDelta, changes.cashDelta],
+          [e.costDelta, changes.costDelta],
+          [e.realizedDelta, changes.realizedDelta],
+        ])
+          if (!D(saved).eq(expected)) throw new Error("备份资产流水净额不一致");
+        replayHoldings.set(key, updatedHolding(old, changes));
+        balance = balance.plus(e.cashDelta);
+      } else {
+        const q = D(e.amount);
+        if (q.eq(0) || (e.type !== "ADJUSTMENT" && q.lte(0)))
+          throw new Error("备份流水数量无效");
+        const expected = (e.type === "WITHDRAWAL" ? q.neg() : q).minus(e.fee);
+        if (!expected.eq(e.delta)) throw new Error("备份流水净额不一致");
+        balance = balance.plus(e.delta);
+      }
       if (balance.lt(0)) throw new Error("备份出现负余额");
       last = e.at;
     }
     if (!balance.eq(a.balance) || sequence !== a.sequence)
       throw new Error("备份余额与流水不一致");
   }
-  for (const e of file.payload.entries) {
-    if (!ids.has(e.accountId) || entryIds.has(e.id))
-      throw new Error("备份关联账户不存在或流水ID重复");
-    entryIds.add(e.id);
+  const keys = new Set<string>();
+  for (const h of payload.holdings) {
+    const key = JSON.stringify([h.accountId, h.assetId]);
+    if (keys.has(key)) throw new Error("备份持仓重复");
+    keys.add(key);
+    const expected = replayHoldings.get(key);
+    if (
+      !expected ||
+      !D(expected.quantity).eq(h.quantity) ||
+      !D(expected.cost).eq(h.cost) ||
+      !D(expected.realized).eq(h.realized)
+    )
+      throw new Error("备份持仓与流水不一致");
   }
-  return file;
+  if (keys.size !== replayHoldings.size) throw new Error("备份缺少持仓");
+  if (
+    new Set(payload.prices.map((p) => p.id)).size !== payload.prices.length ||
+    new Set(payload.prices.map((p) => JSON.stringify([p.assetId, p.at])))
+      .size !== payload.prices.length
+  )
+    throw new Error("备份报价重复");
+  if (
+    payload.prices.some(
+      (p) => !assetIds.has(p.assetId) || new Date(p.at) > new Date(),
+    )
+  )
+    throw new Error("备份报价关联或时间无效");
+  return {
+    kind: file.kind,
+    version: 2 as const,
+    payload,
+    checksum: await digest(payload),
+  };
 }
+
 export class Ledger {
   private pending: Promise<unknown> = Promise.resolve();
   constructor(private db: Sql) {}
@@ -133,9 +239,42 @@ export class Ledger {
   }
   async init() {
     await this.db.batch(schema.map((statement) => ({ statement, values: [] })));
+    await this.db.batch([
+      {
+        statement:
+          "CREATE TABLE IF NOT EXISTS OfflineSchema(version INTEGER NOT NULL)",
+        values: [],
+      },
+    ]);
+    const current = await this.db.query("SELECT version FROM OfflineSchema");
+    if (current.length > 1 || (current[0] && Number(current[0].version) > 2))
+      throw new Error("账本由更新版本创建，请安装最新版本，数据未被修改。");
+    if (!current[0] || Number(current[0].version) < 2)
+      await this.db.batch([
+        ...assetTables.map((statement) => ({ statement, values: [] })),
+        { statement: "DELETE FROM OfflineSchema", values: [] },
+        {
+          statement: "INSERT INTO OfflineSchema(version) VALUES(2)",
+          values: [],
+        },
+      ]);
   }
   private async read(): Promise<State> {
     return {
+      assets: (await this.db.query("SELECT * FROM Asset ORDER BY code")).map(
+        (a) => assetSchema.parse(a),
+      ),
+      holdings: (await this.db.query("SELECT * FROM AssetHolding")).map((a) =>
+        holdingSchema.parse(a),
+      ),
+      assetEntries: (
+        await this.db.query(
+          "SELECT * FROM AssetLedger ORDER BY at DESC,sequence DESC",
+        )
+      ).map((a) => assetEntrySchema.parse(a)),
+      prices: (
+        await this.db.query("SELECT * FROM AssetPrice ORDER BY at DESC")
+      ).map((a) => priceSchema.parse(a)),
       accounts: (
         await this.db.query(
           "SELECT * FROM FinancialAccount ORDER BY platform,name",
@@ -199,8 +338,8 @@ export class Ledger {
       const a = accountSchema.parse(rawAccount);
       const previous = (
         await this.db.query(
-          "SELECT at FROM CashLedger WHERE accountId=? ORDER BY sequence DESC LIMIT 1",
-          [a.id],
+          "SELECT at FROM (SELECT at,sequence FROM CashLedger WHERE accountId=? UNION ALL SELECT at,sequence FROM AssetLedger WHERE accountId=?) ORDER BY sequence DESC LIMIT 1",
+          [a.id, a.id],
         )
       )[0];
       if (previous && input.at < String(previous.at))
@@ -227,13 +366,142 @@ export class Ledger {
       return e;
     });
   }
+  createAsset(raw: unknown) {
+    return this.serial(async () => {
+      const input = assetSchema.omit({ id: true }).parse(raw);
+      if (
+        (await this.db.query("SELECT id FROM Asset WHERE code=?", [input.code]))
+          .length
+      )
+        throw new Error("资产代码已存在");
+      const asset = { id: crypto.randomUUID(), ...input };
+      await this.db.batch([insertRow("Asset", asset)]);
+      return asset;
+    });
+  }
+  setPrice(raw: unknown) {
+    return this.serial(async () => {
+      const input = z
+        .object({
+          assetId: id,
+          price: positive,
+          at: date.transform((d) => d.toISOString()),
+        })
+        .parse(raw);
+      if (new Date(input.at) > new Date())
+        throw new Error("报价不能使用未来时间");
+      if (
+        !(
+          await this.db.query("SELECT id FROM Asset WHERE id=?", [
+            input.assetId,
+          ])
+        ).length
+      )
+        throw new Error("资产不存在");
+      if (
+        (
+          await this.db.query(
+            "SELECT id FROM AssetPrice WHERE assetId=? AND at=?",
+            [input.assetId, input.at],
+          )
+        ).length
+      )
+        throw new Error("该时间已有报价，请选择不同时间");
+      const row = { id: crypto.randomUUID(), ...input };
+      await this.db.batch([insertRow("AssetPrice", row)]);
+      return row;
+    });
+  }
+  postAsset(raw: unknown) {
+    return this.serial(async () => {
+      const input = transactionSchema
+        .omit({ externalId: true, purpose: true })
+        .parse(raw);
+      if (input.at > new Date()) throw new Error("不能记录未来时间");
+      const a = accountSchema.parse(
+        (
+          await this.db.query("SELECT * FROM FinancialAccount WHERE id=?", [
+            input.accountId,
+          ])
+        )[0],
+      );
+      const asset = assetSchema.parse(
+        (
+          await this.db.query("SELECT * FROM Asset WHERE id=?", [input.assetId])
+        )[0],
+      );
+      if (asset.currency !== a.currency)
+        throw new Error("资产结算币种与账户不一致，请选择同币种账户");
+      const previous = (
+        await this.db.query(
+          "SELECT at FROM (SELECT at,sequence FROM CashLedger WHERE accountId=? UNION ALL SELECT at,sequence FROM AssetLedger WHERE accountId=?) ORDER BY sequence DESC LIMIT 1",
+          [a.id, a.id],
+        )
+      )[0];
+      if (previous && input.at.toISOString() < String(previous.at))
+        throw new Error("流水不能早于上一笔记录");
+      const saved = (
+        await this.db.query(
+          "SELECT * FROM AssetHolding WHERE accountId=? AND assetId=?",
+          [a.id, asset.id],
+        )
+      )[0];
+      const old = saved
+        ? holdingSchema.parse(saved)
+        : {
+            accountId: a.id,
+            assetId: asset.id,
+            quantity: "0",
+            cost: "0",
+            realized: "0",
+          };
+      const changes = spotLedgerChanges(
+        { ...input, purpose: "LONG_TERM" },
+        false,
+        old,
+      );
+      const holding = updatedHolding(old, changes),
+        balance = D(a.balance).plus(changes.cashDelta);
+      if (balance.lt(0)) throw new Error("可用现金余额不足");
+      const entry = {
+        ...input,
+        id: crypto.randomUUID(),
+        at: input.at.toISOString(),
+        sequence: a.sequence + 1,
+        quantityDelta: changes.quantity,
+        cashDelta: changes.cashDelta,
+        costDelta: changes.costDelta,
+        realizedDelta: changes.realizedDelta,
+      };
+      await this.db.batch([
+        {
+          statement:
+            "INSERT INTO AssetHolding(accountId,assetId,quantity,cost,realized) VALUES(?,?,?,?,?) ON CONFLICT(accountId,assetId) DO UPDATE SET quantity=excluded.quantity,cost=excluded.cost,realized=excluded.realized",
+          values: [
+            holding.accountId,
+            holding.assetId,
+            holding.quantity,
+            holding.cost,
+            holding.realized,
+          ],
+        },
+        insertRow("AssetLedger", entry),
+        {
+          statement:
+            "UPDATE FinancialAccount SET balance=?,sequence=? WHERE id=?",
+          values: [canonical(balance), entry.sequence, a.id],
+        },
+      ]);
+      return entry;
+    });
+  }
   backup() {
     return this.serial(async () => {
       const s = await this.read();
       const payload = { createdAt: new Date().toISOString(), ...s };
       return {
         kind: "tradeos-android-prototype" as const,
-        version: 1 as const,
+        version: 2 as const,
         payload,
         checksum: await digest(payload),
       };
@@ -243,9 +511,17 @@ export class Ledger {
     return this.serial(async () => {
       const file = await validateBackup(raw);
       await this.db.batch([
+        { statement: "DELETE FROM AssetLedger", values: [] },
+        { statement: "DELETE FROM AssetHolding", values: [] },
+        { statement: "DELETE FROM AssetPrice", values: [] },
+        { statement: "DELETE FROM Asset", values: [] },
         { statement: "DELETE FROM CashLedger", values: [] },
         { statement: "DELETE FROM FinancialAccount", values: [] },
         ...file.payload.accounts.map(accountInsert),
+        ...file.payload.assets.map((a) => insertRow("Asset", a)),
+        ...file.payload.holdings.map((a) => insertRow("AssetHolding", a)),
+        ...file.payload.prices.map((a) => insertRow("AssetPrice", a)),
+        ...file.payload.assetEntries.map((a) => insertRow("AssetLedger", a)),
         ...file.payload.entries
           .sort((a, b) => a.sequence - b.sequence)
           .map(entryInsert),
