@@ -88,6 +88,8 @@ model AssetTransaction {
  price String @default("0")
  fee String @default("0")
  cashDelta String @default("0")
+ costDelta String @default("0")
+ realizedDelta String @default("0")
  currency String
  at DateTime
  note String @default("")
@@ -211,6 +213,7 @@ model TradeFill {
  price String
  fee String
  slippage String @default("0")
+ pnl String @default("0")
  at DateTime
  trade Trade @relation(fields:[tradeId],references:[id],onDelete:Restrict)
  transaction AssetTransaction @relation(fields:[transactionId],references:[id],onDelete:Restrict)
@@ -255,6 +258,9 @@ model BacktestSession {
  cursor Int @default(0)
  branch Int @default(1)
  adjustment String
+ feeRate String @default("0.001")
+ slippageBps String @default("0")
+ annotations String @default("[]")
  createdAt DateTime @default(now())
  asset Asset @relation(fields:[assetId],references:[id],onDelete:Restrict)
  strategyVersion StrategyVersion @relation(fields:[strategyVersionId],references:[id],onDelete:Restrict)
@@ -283,6 +289,7 @@ model BacktestTrade {
  target String
  quantity String
  exit String?
+ exitFee String @default("0")
  fee String
  realized String @default("0")
  entryIndex Int
