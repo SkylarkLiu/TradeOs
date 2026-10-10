@@ -1,0 +1,2 @@
+import {backup,databaseBackup} from '@/lib/services/data';
+export async function GET(request:Request){if(new URL(request.url).searchParams.get('format')==='sqlite')return new Response(await databaseBackup(),{headers:{'Content-Type':'application/octet-stream','Content-Disposition':'attachment; filename="tradeos-database.db"','Cache-Control':'no-store'}});return new Response(JSON.stringify(await backup(),null,2),{headers:{'Content-Type':'application/json','Content-Disposition':'attachment; filename="tradeos-backup.json"','Cache-Control':'no-store'}})}

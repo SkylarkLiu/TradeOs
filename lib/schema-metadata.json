@@ -1,0 +1,1628 @@
+[
+  {
+    "name": "Platform",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "name",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "template",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "createdAt",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "Account",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "platformId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "name",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "currency",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "archived",
+        "type": "Boolean",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "createdAt",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "Asset",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "code",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "name",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "assetClass",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "currency",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "instrument",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "multiplier",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "investable",
+        "type": "Boolean",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "createdAt",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "AssetBalance",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "accountId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "assetId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "quantity",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "cost",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "realized",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "purpose",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "AssetPrice",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "assetId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "price",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "at",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "source",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "FXRate",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "from",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "to",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "rate",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "at",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "source",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "AssetTransaction",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "accountId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "assetId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "type",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "quantity",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "price",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "fee",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "cashDelta",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "costDelta",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "realizedDelta",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "currency",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "at",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "note",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "externalId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": false
+      },
+      {
+        "name": "transferId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": false
+      },
+      {
+        "name": "reversalOf",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": false
+      }
+    ]
+  },
+  {
+    "name": "Transfer",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "fromId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "toId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "assetId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "quantity",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "fee",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "cost",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "status",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "at",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "completedAt",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": false
+      }
+    ]
+  },
+  {
+    "name": "Liability",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "name",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "amount",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "currency",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "investable",
+        "type": "Boolean",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "at",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "Strategy",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "name",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "archived",
+        "type": "Boolean",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "createdAt",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "StrategyVersion",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "strategyId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "version",
+        "type": "Int",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "market",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "timeframe",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "environment",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "rules",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "published",
+        "type": "Boolean",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "createdAt",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "TradingPlan",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "accountId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "assetId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "strategyVersionId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": false
+      },
+      {
+        "name": "direction",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "entry",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "stop",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "target",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "equity",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "riskPercent",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "quantity",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "reason",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "invalidation",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "createdAt",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "Trade",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "accountId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "assetId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "strategyVersionId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": false
+      },
+      {
+        "name": "planId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": false
+      },
+      {
+        "name": "direction",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "status",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "leverage",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "margin",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "initialRisk",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "quantity",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "averageEntry",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "realized",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "fees",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "stop",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": false
+      },
+      {
+        "name": "target",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": false
+      },
+      {
+        "name": "reason",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "emotion",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "tags",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "environment",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "openedAt",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "closedAt",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": false
+      }
+    ]
+  },
+  {
+    "name": "TradeFill",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "tradeId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "transactionId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "action",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "quantity",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "price",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "fee",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "slippage",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "pnl",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "at",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "PositionEvent",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "tradeId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "type",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "detail",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "at",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "TradeReview",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "tradeId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": false
+      },
+      {
+        "name": "period",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "at",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "scores",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "tags",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "content",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "TradeAttachment",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "tradeId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": false
+      },
+      {
+        "name": "strategyVersionId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": false
+      },
+      {
+        "name": "name",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "mime",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "data",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "createdAt",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "BacktestSession",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "name",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "assetId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "strategyVersionId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "timeframe",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "currency",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "initialCapital",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "cursor",
+        "type": "Int",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "branch",
+        "type": "Int",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "adjustment",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "feeRate",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "slippageBps",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "annotations",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "createdAt",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "Candle",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "sessionId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "at",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "open",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "high",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "low",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "close",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "volume",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "BacktestTrade",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "sessionId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "branch",
+        "type": "Int",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "direction",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "entry",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "stop",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "target",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "quantity",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "exit",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": false
+      },
+      {
+        "name": "exitFee",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "fee",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "realized",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "entryIndex",
+        "type": "Int",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "exitIndex",
+        "type": "Int",
+        "kind": "scalar",
+        "isRequired": false
+      }
+    ]
+  },
+  {
+    "name": "AccountCashFlow",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "accountId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "amount",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "currency",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "kind",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "transactionId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "at",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "AccountValuation",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "accountId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "value",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "currency",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "source",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "at",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "PortfolioSnapshot",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "currency",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "assets",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "liabilities",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "net",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "investable",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "complete",
+        "type": "Boolean",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "at",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "AssetAllocationSnapshot",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "snapshotId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "assetClass",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "value",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "FinancialGoal",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "name",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "age",
+        "type": "Int",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "retirementAge",
+        "type": "Int",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "retirementDate",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "monthlyContribution",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "monthlyExpense",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "inflation",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "conservative",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "baseReturn",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "optimistic",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "withdrawalRate",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "target",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": false
+      },
+      {
+        "name": "currency",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "ImportBatch",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "hash",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "name",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "status",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "count",
+        "type": "Int",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "createdAt",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "ImportRow",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "batchId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "row",
+        "type": "Int",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "externalId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "status",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "detail",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "SyncJob",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "source",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "status",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "detail",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "createdAt",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "SystemSetting",
+    "fields": [
+      {
+        "name": "key",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "value",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  },
+  {
+    "name": "AuditLog",
+    "fields": [
+      {
+        "name": "id",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "action",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "entityId",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "detail",
+        "type": "String",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
+        "name": "at",
+        "type": "DateTime",
+        "kind": "scalar",
+        "isRequired": true
+      }
+    ]
+  }
+]
