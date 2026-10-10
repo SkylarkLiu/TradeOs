@@ -4,11 +4,27 @@
 
 所有金额以十进制字符串保存、使用 Decimal 计算。真实成交与财富账本共用事务；模拟回测使用独立数据表。首版无需云账号，价格、汇率与成交由用户录入。
 
+## 功能范围
+
+| 模块 | 已实现能力 |
+| --- | --- |
+| 全局资产 | 多平台、多账户、多币种资产与负债，报价、汇率、转账及资产配置 |
+| 交易管理 | 策略版本、交易计划、多笔成交、持仓跟踪，统一财富账本 |
+| 手动回测 | 历史K线逐根回放、模拟成交、会话分支，与真实交易隔离 |
+| 交易复盘 | 复盘记录、附件、规则评分与策略归因 |
+| 绩效分析 | 资产历史、现金流、收益、回撤及交易表现 |
+| 财务自由 | 可投资净资产、目标保存、投入与退休情景模拟 |
+| 数据管理 | CSV导入、对账、完整JSON/SQLite备份及事务恢复 |
+
+网页版是完整本地应用；安卓目前为独立离线样机，只包含现金账本、复利计算、备份和自检。两者的备份格式尚不兼容。
+
 ## 开始使用
 
 需要 Node.js 22.12+ 和 npm。依赖包含 SQLite 原生模块；没有适配预编译包时需要本机编译工具。
 
 ```sh
+git clone https://github.com/SkylarkLiu/TradeOs.git
+cd TradeOs
 npm ci
 npm run db:setup
 npm run dev
@@ -69,6 +85,43 @@ npm audit --omit=dev
 首版适用于个人规模的本地使用。支持现货、线性及反向合约；不模拟维持保证金、强平、资金费、期权或交易所特殊规则。不连接交易所自动执行买卖、提现或划转。FIRE情景是用户假设下的数学模拟。
 
 
-## 安卓离线样机进展
+## 安卓离线样机
 
-2026-10-10：已交付第一阶段原生SQLite离线样机，计算与校验共用逻辑已提取到 `packages/core`。完整业务迁移尚未完成，OPPO Pad Mini待实机验收。详见[安卓迁移记录](docs/android-migration.md)。
+`apps/android` 使用React、Vite和Capacitor，安卓设备通过原生SQLite保存数据，无需电脑服务器。页面和计算资源打包在应用内；浏览器预览使用sql.js与IndexedDB，属于独立验证环境。
+
+需要Java 21、Android SDK 36及Node.js，设置 `JAVA_HOME` 和 `ANDROID_SDK_ROOT` 后，在项目根目录执行：
+
+```sh
+npm ci
+npm ci --prefix apps/android
+npm run apk --prefix apps/android
+```
+
+安装包生成于 `artifacts/android/TradeOS-offline-prototype-0.1.0.apk`，并生成SHA256校验文件。它使用调试签名，仅供当前阶段验收；仓库不提交APK或SDK。
+
+截至2026-10-10，Android 16平板模拟器已验证断网运行、事务回滚、精确金额、进程重启后数据保留和系统文件导出。3项原生测试、6项领域测试和2项浏览器预览测试通过。OPPO Pad Mini尚待实机验收，完整交易、回测、复盘等功能仍待迁移。
+
+样机数据库尚未加密，请先使用测试数据；清除数据或卸载应用会删除私有账本与私有备份，应先导出到独立文件。详见[安卓安装与迁移进度](docs/android-migration.md)和[安卓开发说明](apps/android/README.md)。
+
+## 技术栈与目录
+
+网页版采用Next.js、React、TypeScript、Prisma、SQLite、Zod、Decimal.js和ECharts；测试使用Vitest与Playwright。实际安装版本以各自的锁文件为准。
+
+```text
+app/                 Web页面及API入口
+components/          中文工作台、表单、图表与业务界面
+lib/services/        财富、交易、回测、绩效与备份业务
+lib/repositories/    Web数据库访问
+packages/core/       Web与安卓共用的金额计算和校验
+prisma/              数据模型与版本迁移
+apps/android/        安卓离线样机及原生文件插件
+scripts/             启动、演示、数据库与验收工具
+tests/               Web计算、账本与浏览器测试
+docs/                架构、使用指南与验收记录
+```
+
+## 数据与协作
+
+个人数据库、备份、附件和本地配置保留在本机，不提交到Git。请勿在Issue或提交中附上真实财务数据；复现问题时使用虚拟演示账本。依赖与构建产物由安装和构建命令生成。
+
+提交业务修改前执行类型检查、代码检查及相关测试；涉及持久化变更时同时检查迁移与备份恢复。需求边界及当前验证限制见[产品范围](PRODUCT.md)和[测试记录](docs/testing.md)。
