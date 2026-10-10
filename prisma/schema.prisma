@@ -173,6 +173,8 @@ model Trade {
  planId String?
  direction String
  status String @default("OPEN")
+ leverage String @default("1")
+ margin String @default("0")
  initialRisk String @default("0")
  quantity String @default("0")
  averageEntry String @default("0")

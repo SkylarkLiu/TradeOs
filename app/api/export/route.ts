@@ -1,0 +1,3 @@
+import {db} from '@/lib/repositories/db';
+import {safeCsv} from '@/lib/services/imports';
+export async function GET(){const rows=await db.assetTransaction.findMany({orderBy:{at:'asc'}});return new Response('\uFEFF'+safeCsv(rows.map(r=>({id:r.id,accountId:r.accountId,assetId:r.assetId,type:r.type,quantity:['SELL','WITHDRAWAL','FEE'].includes(r.type)?r.quantity.replace(/^-/,''):r.quantity,price:r.price,fee:r.fee,at:r.at.toISOString(),note:r.note,externalId:r.externalId??r.id}))),{headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="tradeos-transactions.csv"'}})}
