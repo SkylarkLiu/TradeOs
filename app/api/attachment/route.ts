@@ -1,0 +1,2 @@
+import {db} from '@/lib/repositories/db';
+export async function GET(request:Request){const id=new URL(request.url).searchParams.get('id');if(!id)return new Response('缺少附件ID',{status:400});const row=await db.tradeAttachment.findUnique({where:{id}});if(!row)return new Response('附件不存在',{status:404});return new Response(Buffer.from(row.data,'base64'),{headers:{'Content-Type':row.mime,'X-Content-Type-Options':'nosniff','Cache-Control':'no-store'}})}

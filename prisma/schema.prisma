@@ -46,6 +46,7 @@ model Asset {
  trades Trade[]
  plans TradingPlan[]
  sessions BacktestSession[]
+ transfers Transfer[]
 }
 model AssetBalance {
  id String @id @default(cuid())
@@ -97,6 +98,7 @@ model AssetTransaction {
  asset Asset @relation(fields:[assetId],references:[id],onDelete:Restrict)
  transfer Transfer? @relation(fields:[transferId],references:[id],onDelete:Restrict)
  fill TradeFill?
+ cashFlow AccountCashFlow?
  @@index([accountId,at])
 }
 model Transfer {
@@ -113,6 +115,7 @@ model Transfer {
  fromAccount Account @relation("from",fields:[fromId],references:[id],onDelete:Restrict)
  toAccount Account @relation("to",fields:[toId],references:[id],onDelete:Restrict)
  transactions AssetTransaction[]
+ asset Asset @relation(fields:[assetId],references:[id],onDelete:Restrict)
 }
 model Liability {
  id String @id @default(cuid())
@@ -143,6 +146,7 @@ model StrategyVersion {
  plans TradingPlan[]
  trades Trade[]
  sessions BacktestSession[]
+ attachments TradeAttachment[]
  @@unique([strategyId,version])
 }
 model TradingPlan {
@@ -238,6 +242,7 @@ model TradeAttachment {
  data String
  createdAt DateTime @default(now())
  trade Trade? @relation(fields:[tradeId],references:[id],onDelete:Restrict)
+ strategyVersion StrategyVersion? @relation(fields:[strategyVersionId],references:[id],onDelete:Restrict)
 }
 model BacktestSession {
  id String @id @default(cuid())
@@ -293,6 +298,7 @@ model AccountCashFlow {
  transactionId String @unique
  at DateTime
  account Account @relation(fields:[accountId],references:[id],onDelete:Restrict)
+ transaction AssetTransaction @relation(fields:[transactionId],references:[id],onDelete:Restrict)
 }
 model AccountValuation {
  id String @id @default(cuid())
