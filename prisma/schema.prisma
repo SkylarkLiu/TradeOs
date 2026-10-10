@@ -1,0 +1,375 @@
+generator client {
+ provider = "prisma-client"
+ output = "../generated/prisma"
+}
+datasource db {
+ provider = "sqlite"
+}
+model Platform {
+ id String @id @default(cuid())
+ name String @unique
+ template String @default("Other")
+ createdAt DateTime @default(now())
+ accounts Account[]
+}
+model Account {
+ id String @id @default(cuid())
+ platformId String
+ name String
+ currency String @default("CNY")
+ archived Boolean @default(false)
+ createdAt DateTime @default(now())
+ platform Platform @relation(fields:[platformId],references:[id],onDelete:Restrict)
+ balances AssetBalance[]
+ transactions AssetTransaction[]
+ trades Trade[]
+ plans TradingPlan[]
+ valuations AccountValuation[]
+ cashFlows AccountCashFlow[]
+ outbound Transfer[] @relation("from")
+ inbound Transfer[] @relation("to")
+ @@unique([platformId,name])
+}
+model Asset {
+ id String @id @default(cuid())
+ code String @unique
+ name String
+ assetClass String
+ currency String
+ instrument String @default("SPOT")
+ multiplier String @default("1")
+ investable Boolean @default(true)
+ createdAt DateTime @default(now())
+ balances AssetBalance[]
+ prices AssetPrice[]
+ transactions AssetTransaction[]
+ trades Trade[]
+ plans TradingPlan[]
+ sessions BacktestSession[]
+}
+model AssetBalance {
+ id String @id @default(cuid())
+ accountId String
+ assetId String
+ quantity String @default("0")
+ cost String @default("0")
+ realized String @default("0")
+ purpose String @default("LONG_TERM")
+ account Account @relation(fields:[accountId],references:[id],onDelete:Restrict)
+ asset Asset @relation(fields:[assetId],references:[id],onDelete:Restrict)
+ @@unique([accountId,assetId])
+}
+model AssetPrice {
+ id String @id @default(cuid())
+ assetId String
+ price String
+ at DateTime
+ source String @default("MANUAL")
+ asset Asset @relation(fields:[assetId],references:[id],onDelete:Restrict)
+ @@unique([assetId,at])
+ @@index([at])
+}
+model FXRate {
+ id String @id @default(cuid())
+ from String
+ to String
+ rate String
+ at DateTime
+ source String @default("MANUAL")
+ @@unique([from,to,at])
+}
+model AssetTransaction {
+ id String @id @default(cuid())
+ accountId String
+ assetId String
+ type String
+ quantity String
+ price String @default("0")
+ fee String @default("0")
+ cashDelta String @default("0")
+ currency String
+ at DateTime
+ note String @default("")
+ externalId String? @unique
+ transferId String?
+ reversalOf String? @unique
+ account Account @relation(fields:[accountId],references:[id],onDelete:Restrict)
+ asset Asset @relation(fields:[assetId],references:[id],onDelete:Restrict)
+ transfer Transfer? @relation(fields:[transferId],references:[id],onDelete:Restrict)
+ fill TradeFill?
+ @@index([accountId,at])
+}
+model Transfer {
+ id String @id @default(cuid())
+ fromId String
+ toId String
+ assetId String
+ quantity String
+ fee String
+ cost String
+ status String @default("IN_TRANSIT")
+ at DateTime
+ completedAt DateTime?
+ fromAccount Account @relation("from",fields:[fromId],references:[id],onDelete:Restrict)
+ toAccount Account @relation("to",fields:[toId],references:[id],onDelete:Restrict)
+ transactions AssetTransaction[]
+}
+model Liability {
+ id String @id @default(cuid())
+ name String
+ amount String
+ currency String
+ investable Boolean @default(true)
+ at DateTime @default(now())
+}
+model Strategy {
+ id String @id @default(cuid())
+ name String @unique
+ archived Boolean @default(false)
+ createdAt DateTime @default(now())
+ versions StrategyVersion[]
+}
+model StrategyVersion {
+ id String @id @default(cuid())
+ strategyId String
+ version Int
+ market String
+ timeframe String
+ environment String
+ rules String
+ published Boolean @default(false)
+ createdAt DateTime @default(now())
+ strategy Strategy @relation(fields:[strategyId],references:[id],onDelete:Restrict)
+ plans TradingPlan[]
+ trades Trade[]
+ sessions BacktestSession[]
+ @@unique([strategyId,version])
+}
+model TradingPlan {
+ id String @id @default(cuid())
+ accountId String
+ assetId String
+ strategyVersionId String?
+ direction String
+ entry String
+ stop String
+ target String
+ equity String
+ riskPercent String
+ quantity String
+ reason String
+ invalidation String
+ createdAt DateTime @default(now())
+ account Account @relation(fields:[accountId],references:[id],onDelete:Restrict)
+ asset Asset @relation(fields:[assetId],references:[id],onDelete:Restrict)
+ strategyVersion StrategyVersion? @relation(fields:[strategyVersionId],references:[id],onDelete:Restrict)
+ trades Trade[]
+}
+model Trade {
+ id String @id @default(cuid())
+ accountId String
+ assetId String
+ strategyVersionId String?
+ planId String?
+ direction String
+ status String @default("OPEN")
+ initialRisk String @default("0")
+ quantity String @default("0")
+ averageEntry String @default("0")
+ realized String @default("0")
+ fees String @default("0")
+ stop String?
+ target String?
+ reason String @default("")
+ emotion String @default("")
+ tags String @default("[]")
+ environment String @default("")
+ openedAt DateTime
+ closedAt DateTime?
+ account Account @relation(fields:[accountId],references:[id],onDelete:Restrict)
+ asset Asset @relation(fields:[assetId],references:[id],onDelete:Restrict)
+ strategyVersion StrategyVersion? @relation(fields:[strategyVersionId],references:[id],onDelete:Restrict)
+ plan TradingPlan? @relation(fields:[planId],references:[id],onDelete:Restrict)
+ fills TradeFill[]
+ events PositionEvent[]
+ reviews TradeReview[]
+ attachments TradeAttachment[]
+ @@index([accountId,openedAt])
+}
+model TradeFill {
+ id String @id @default(cuid())
+ tradeId String
+ transactionId String @unique
+ action String
+ quantity String
+ price String
+ fee String
+ slippage String @default("0")
+ at DateTime
+ trade Trade @relation(fields:[tradeId],references:[id],onDelete:Restrict)
+ transaction AssetTransaction @relation(fields:[transactionId],references:[id],onDelete:Restrict)
+}
+model PositionEvent {
+ id String @id @default(cuid())
+ tradeId String
+ type String
+ detail String
+ at DateTime @default(now())
+ trade Trade @relation(fields:[tradeId],references:[id],onDelete:Restrict)
+}
+model TradeReview {
+ id String @id @default(cuid())
+ tradeId String?
+ period String @default("TRADE")
+ at DateTime
+ scores String
+ tags String
+ content String
+ trade Trade? @relation(fields:[tradeId],references:[id],onDelete:Restrict)
+}
+model TradeAttachment {
+ id String @id @default(cuid())
+ tradeId String?
+ strategyVersionId String?
+ name String
+ mime String
+ data String
+ createdAt DateTime @default(now())
+ trade Trade? @relation(fields:[tradeId],references:[id],onDelete:Restrict)
+}
+model BacktestSession {
+ id String @id @default(cuid())
+ name String
+ assetId String
+ strategyVersionId String
+ timeframe String
+ currency String
+ initialCapital String
+ cursor Int @default(0)
+ branch Int @default(1)
+ adjustment String
+ createdAt DateTime @default(now())
+ asset Asset @relation(fields:[assetId],references:[id],onDelete:Restrict)
+ strategyVersion StrategyVersion @relation(fields:[strategyVersionId],references:[id],onDelete:Restrict)
+ candles Candle[]
+ trades BacktestTrade[]
+}
+model Candle {
+ id String @id @default(cuid())
+ sessionId String
+ at DateTime
+ open String
+ high String
+ low String
+ close String
+ volume String
+ session BacktestSession @relation(fields:[sessionId],references:[id],onDelete:Restrict)
+ @@unique([sessionId,at])
+}
+model BacktestTrade {
+ id String @id @default(cuid())
+ sessionId String
+ branch Int
+ direction String
+ entry String
+ stop String
+ target String
+ quantity String
+ exit String?
+ fee String
+ realized String @default("0")
+ entryIndex Int
+ exitIndex Int?
+ session BacktestSession @relation(fields:[sessionId],references:[id],onDelete:Restrict)
+}
+model AccountCashFlow {
+ id String @id @default(cuid())
+ accountId String
+ amount String
+ currency String
+ kind String
+ transactionId String @unique
+ at DateTime
+ account Account @relation(fields:[accountId],references:[id],onDelete:Restrict)
+}
+model AccountValuation {
+ id String @id @default(cuid())
+ accountId String
+ value String
+ currency String
+ source String
+ at DateTime
+ account Account @relation(fields:[accountId],references:[id],onDelete:Restrict)
+ @@unique([accountId,at])
+}
+model PortfolioSnapshot {
+ id String @id @default(cuid())
+ currency String
+ assets String
+ liabilities String
+ net String
+ investable String
+ complete Boolean
+ at DateTime
+ allocations AssetAllocationSnapshot[]
+ @@unique([currency,at])
+}
+model AssetAllocationSnapshot {
+ id String @id @default(cuid())
+ snapshotId String
+ assetClass String
+ value String
+ snapshot PortfolioSnapshot @relation(fields:[snapshotId],references:[id],onDelete:Restrict)
+}
+model FinancialGoal {
+ id String @id @default(cuid())
+ name String @unique
+ age Int
+ retirementAge Int
+ retirementDate DateTime
+ monthlyContribution String
+ monthlyExpense String
+ inflation String
+ conservative String
+ baseReturn String
+ optimistic String
+ withdrawalRate String
+ target String?
+ currency String @default("CNY")
+}
+model ImportBatch {
+ id String @id @default(cuid())
+ hash String @unique
+ name String
+ status String
+ count Int
+ createdAt DateTime @default(now())
+ rows ImportRow[]
+}
+model ImportRow {
+ id String @id @default(cuid())
+ batchId String
+ row Int
+ externalId String
+ status String
+ detail String
+ batch ImportBatch @relation(fields:[batchId],references:[id],onDelete:Restrict)
+}
+model SyncJob {
+ id String @id @default(cuid())
+ source String
+ status String
+ detail String
+ createdAt DateTime @default(now())
+}
+model SystemSetting {
+ key String @id
+ value String
+}
+model AuditLog {
+ id String @id @default(cuid())
+ action String
+ entityId String
+ detail String
+ at DateTime @default(now())
+}

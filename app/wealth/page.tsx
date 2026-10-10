@@ -1,0 +1,3 @@
+import {db} from '@/lib/repositories/db';
+export const dynamic='force-dynamic';
+export default async function Page(){const [platforms,accounts,assets]=await Promise.all([db.platform.count(),db.account.count(),db.asset.count()]);return <><div className="page-heading"><div><h1>总资产</h1><p className="subtitle">将分散的资产，放进一份清晰的账本。</p></div><span className="badge">本地账本</span></div><div className="metrics">{[['平台',platforms],['账户',accounts],['资产',assets],['报告币种','CNY']].map(([k,v])=><div className="metric" key={k}><div className="metric-label">{k}</div><div className="metric-value">{v}</div></div>)}</div><section className="panel"><h2>开始建立财富账本</h2><p className="detail">依次创建平台、账户和资产，再录入期初余额。所有金额保留十进制精度，历史记录使用UTC存储。</p></section></>}
