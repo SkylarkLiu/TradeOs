@@ -1,25 +1,535 @@
-import {z} from 'zod';
-import Papa from 'papaparse';
-import {db} from '@/lib/repositories/db';
-import {D,sum,contractPnl,positionSize,tradeMetrics,maxDrawdown} from '@/lib/calculations/decimal';
-import {id,text,positive,nonnegative,direction,date} from '@/lib/validation/common';
-import {audit,type Tx} from './wealth';
-const timeframes={'1m':60000,'5m':300000,'15m':900000,'1h':3600000,'4h':14400000,'1d':86400000,'1w':604800000};
-const candleSchema=z.object({at:date,open:positive,high:positive,low:positive,close:positive,volume:nonnegative}).refine(c=>D(c.high).gte(c.open)&&D(c.high).gte(c.close)&&D(c.low).lte(c.open)&&D(c.low).lte(c.close)&&D(c.high).gte(c.low),'OHLC高低价关系错误');
-type Annotation={branch:number;index:number;price:string;label:string};
-const inputId=z.object({sessionId:id});
-export async function backtestCommand(action:string,raw:unknown){switch(action){
- case 'backtest.create':{const input=z.object({name:text,assetId:id,strategyVersionId:id,timeframe:z.enum(['1m','5m','15m','1h','4h','1d','1w']),initialCapital:positive,adjustment:z.enum(['RAW','FORWARD','BACKWARD']),feeRate:nonnegative.default('0.001'),slippageBps:nonnegative.default('0')}).parse(raw);if(D(input.feeRate).gt('0.1')||D(input.slippageBps).gt(1000))throw new Error('费用或滑点参数超出合理输入范围');return db.$transaction(async tx=>{const a=await tx.asset.findUniqueOrThrow({where:{id:input.assetId}});if(a.assetClass==='CASH')throw new Error('现金不能作为回测标的');const v=await tx.strategyVersion.findUniqueOrThrow({where:{id:input.strategyVersionId},include:{strategy:true}});if(!v.published||v.strategy.archived)throw new Error('请选择活跃策略的已发布版本');const r=await tx.backtestSession.create({data:{...input,currency:a.currency}});await audit(tx,action,r.id,input);return r})}
- case 'backtest.import':{const input=z.object({sessionId:id,csv:z.string().max(20_000_000),allowGaps:z.boolean().default(false)}).parse(raw);const parsed=Papa.parse<Record<string,string>>(input.csv,{header:true,skipEmptyLines:'greedy'});if(parsed.errors.length)throw new Error('CSV格式错误');if(!parsed.data.length||parsed.data.length>50000)throw new Error('需要1至50000根K线');const rows=parsed.data.map((row,index)=>{let at=row.at??row.timestamp??row.time;if(/^\d{10}$/.test(at))at=new Date(Number(at)*1000).toISOString();else if(/^\d{13}$/.test(at))at=new Date(Number(at)).toISOString();const result=candleSchema.safeParse({...row,at});if(!result.success)throw new Error(`K线第${index+2}行：${result.error.issues.map(i=>i.message).join('；')}`);return result.data});return db.$transaction(async tx=>{const session=await tx.backtestSession.findUniqueOrThrow({where:{id:input.sessionId},include:{_count:{select:{candles:true}}}});if(session._count.candles)throw new Error('历史数据已导入，请创建新任务以保留已有回放');const step=timeframes[session.timeframe as keyof typeof timeframes];let gaps=0;for(let i=1;i<rows.length;i++){const delta=rows[i].at.getTime()-rows[i-1].at.getTime();if(delta<=0)throw new Error('时间戳必须严格递增，不能重复');if(delta<step)throw new Error('K线间隔小于任务周期');if(delta!==step)gaps++}if(gaps&&!input.allowGaps)throw new Error(`发现${gaps}处时间缺口；确认休市或缺失数据后勾选允许缺口`);await tx.candle.createMany({data:rows.map(row=>({...row,sessionId:session.id}))});await audit(tx,action,session.id,{count:rows.length,gaps,adjustment:session.adjustment});return {count:rows.length,gaps}}, {timeout:60000})}
- case 'backtest.step':{const input=z.object({sessionId:id,direction:z.enum(['NEXT','PREVIOUS'])}).parse(raw);return db.$transaction(async tx=>{const s=await tx.backtestSession.findUniqueOrThrow({where:{id:input.sessionId},include:{asset:true,_count:{select:{candles:true}},trades:true}});const next=s.cursor+(input.direction==='NEXT'?1:-1);if(next<0||next>=s._count.candles)throw new Error('已到回放边界');if(input.direction==='PREVIOUS'){const branch=s.branch+1,prior=s.trades.filter(t=>t.branch===s.branch&&t.entryIndex<=next);for(const t of prior){const {id:oldId,...data}=t;void oldId;const futureExit=t.exitIndex!==null&&t.exitIndex>next;await tx.backtestTrade.create({data:{...data,branch,...(futureExit?{exit:null,exitIndex:null,exitFee:'0',realized:D(t.fee).neg().toFixed()}: {})}})}const annotations=JSON.parse(s.annotations) as Annotation[];await tx.backtestSession.update({where:{id:s.id},data:{cursor:next,branch,annotations:JSON.stringify([...annotations,...annotations.filter(a=>a.branch===s.branch&&a.index<=next).map(a=>({...a,branch}))])}});await audit(tx,'BACKTEST_BRANCH',s.id,{from:s.branch,to:branch,cursor:next})}else{const candle=await tx.candle.findFirstOrThrow({where:{sessionId:s.id},orderBy:{at:'asc'},skip:next});for(const t of s.trades.filter(t=>t.branch===s.branch&&t.exit===null)){const long=t.direction==='LONG';const stopHit=long?D(candle.low).lte(t.stop):D(candle.high).gte(t.stop),targetHit=long?D(candle.high).gte(t.target):D(candle.low).lte(t.target);if(stopHit||targetHit){let price=stopHit?t.stop:t.target;if(stopHit&&(long?D(candle.open).lt(t.stop):D(candle.open).gt(t.stop)))price=candle.open;await closeSimulated(tx,s,t,price,next)}}await tx.backtestSession.update({where:{id:s.id},data:{cursor:next}})}return {cursor:next}})}
- case 'backtest.entry':{const input=z.object({sessionId:id,direction,quantity:positive,stop:positive,target:positive}).parse(raw);return db.$transaction(async tx=>{const s=await tx.backtestSession.findUniqueOrThrow({where:{id:input.sessionId},include:{asset:true,trades:{where:{exit:null}}}}),c=await tx.candle.findFirstOrThrow({where:{sessionId:s.id},orderBy:{at:'asc'},skip:s.cursor});if(s.asset.instrument==='SPOT'&&input.direction==='SHORT')throw new Error('现货回测不支持无借券卖空');const price=D(c.close).mul(D(1).plus(D(s.slippageBps).div(10000).mul(input.direction==='LONG'?1:-1)));positionSize({instrument:s.asset.instrument,direction:input.direction,entry:price.toFixed(),stop:input.stop,equity:s.initialCapital,riskPercent:'1',multiplier:s.asset.multiplier});if(input.direction==='LONG'?D(input.target).lte(price):D(input.target).gte(price))throw new Error('止盈方向错误');const all=await tx.backtestTrade.findMany({where:{sessionId:s.id,branch:s.branch}}),available=D(s.initialCapital).plus(sum(all.map(t=>t.realized))).minus(sum(all.filter(t=>t.exit===null).map(t=>notional(s.asset.instrument,t.quantity,t.entry,s.asset.multiplier).toFixed())));const nominal=notional(s.asset.instrument,input.quantity,price.toFixed(),s.asset.multiplier),fee=nominal.mul(s.feeRate);if(nominal.plus(fee).gt(available))throw new Error('模拟可用资金不足（保证金按1倍计算）');const r=await tx.backtestTrade.create({data:{sessionId:s.id,branch:s.branch,direction:input.direction,entry:price.toFixed(),stop:input.stop,target:input.target,quantity:input.quantity,fee:fee.toFixed(),realized:fee.neg().toFixed(),entryIndex:s.cursor}});await audit(tx,action,r.id,{...input,cursor:s.cursor});return r})}
- case 'backtest.exit':{const input=z.object({sessionId:id,tradeId:id}).parse(raw);return db.$transaction(async tx=>{const s=await tx.backtestSession.findUniqueOrThrow({where:{id:input.sessionId},include:{asset:true}}),t=await tx.backtestTrade.findUniqueOrThrow({where:{id:input.tradeId}});if(t.sessionId!==s.id||t.branch!==s.branch||t.exit!==null)throw new Error('模拟交易不属于当前活动分支或已经平仓');const c=await tx.candle.findFirstOrThrow({where:{sessionId:s.id},orderBy:{at:'asc'},skip:s.cursor});const r=await closeSimulated(tx,s,t,c.close,s.cursor);await audit(tx,action,r.id,{cursor:s.cursor});return r})}
- case 'backtest.annotation':{const input=z.object({sessionId:id,price:positive,label:text}).parse(raw);return db.$transaction(async tx=>{const s=await tx.backtestSession.findUniqueOrThrow({where:{id:input.sessionId}}),annotations=JSON.parse(s.annotations) as Annotation[];if(annotations.length>2000)throw new Error('标注数量达到上限');await tx.backtestSession.update({where:{id:s.id},data:{annotations:JSON.stringify([...annotations,{branch:s.branch,index:s.cursor,price:input.price,label:input.label}])}});await audit(tx,action,s.id,input);return {saved:true}})}
- default:throw new Error('未知回测操作');
-}}
-function notional(instrument:string,quantity:string,price:string,multiplier:string){return D(quantity).mul(multiplier).mul(instrument==='INVERSE'?D(1).div(price):D(price))}
-type SimSession={id:string;feeRate:string;slippageBps:string;asset:{instrument:string;multiplier:string}};
-type SimTrade={id:string;direction:string;quantity:string;entry:string;fee:string};
-async function closeSimulated(tx:Tx,s:SimSession,t:SimTrade,rawPrice:string,index:number){const price=D(rawPrice).mul(D(1).minus(D(s.slippageBps).div(10000).mul(t.direction==='LONG'?1:-1))),fee=notional(s.asset.instrument,t.quantity,price.toFixed(),s.asset.multiplier).mul(s.feeRate),realized=contractPnl(s.asset.instrument,t.direction,t.quantity,t.entry,price.toFixed(),s.asset.multiplier).minus(t.fee).minus(fee);return tx.backtestTrade.update({where:{id:t.id},data:{exit:price.toFixed(),exitIndex:index,exitFee:fee.toFixed(),realized:realized.toFixed()}})}
-export async function backtestState(raw:unknown){const {sessionId}=inputId.parse(raw);return db.$transaction(async tx=>{const s=await tx.backtestSession.findUniqueOrThrow({where:{id:sessionId},include:{asset:true,_count:{select:{candles:true}}}}),candles=await tx.candle.findMany({where:{sessionId:s.id},orderBy:{at:'asc'},take:s.cursor+1}),trades=await tx.backtestTrade.findMany({where:{sessionId:s.id,branch:s.branch,entryIndex:{lte:s.cursor}},orderBy:{entryIndex:'asc'}});const equity=candles.map((c,i)=>({at:c.at.toISOString(),value:D(s.initialCapital).plus(sum(trades.filter(t=>t.entryIndex<=i).map(t=>t.exitIndex!==null&&t.exitIndex<=i?t.realized:contractPnl(s.asset.instrument,t.direction,t.quantity,t.entry,c.close,s.asset.multiplier).minus(t.fee).toFixed()))).toFixed()}));const metrics=tradeMetrics(trades.map(t=>({realized:t.realized,initialRisk:contractPnl(s.asset.instrument,t.direction,t.quantity,t.entry,t.stop,s.asset.multiplier).abs().toFixed(),openedAt:candles[t.entryIndex].at,closedAt:t.exitIndex!==null?candles[t.exitIndex]?.at??null:null})));return {session:{...s,annotations:undefined},candles:candles.map(c=>({...c,at:c.at.toISOString()})),trades,annotations:(JSON.parse(s.annotations) as Annotation[]).filter(a=>a.branch===s.branch&&a.index<=s.cursor),report:{...metrics,equity:equity.at(-1)?.value??s.initialCapital,totalReturn:D(equity.at(-1)?.value??s.initialCapital).div(s.initialCapital).minus(1).toFixed(),drawdown:maxDrawdown(equity.map(e=>e.value))},equity};},{timeout:30000})}
-export type BacktestState=Awaited<ReturnType<typeof backtestState>>;
+import { z } from "zod";
+import Papa from "papaparse";
+import { db } from "@/lib/repositories/db";
+import {
+  D,
+  sum,
+  contractPnl,
+  positionSize,
+  tradeMetrics,
+  maxDrawdown,
+} from "@/lib/calculations/decimal";
+import {
+  id,
+  text,
+  positive,
+  nonnegative,
+  direction,
+  date,
+} from "@/lib/validation/common";
+import { audit, type Tx } from "./wealth";
+const timeframes = {
+  "1m": 60000,
+  "5m": 300000,
+  "15m": 900000,
+  "1h": 3600000,
+  "4h": 14400000,
+  "1d": 86400000,
+  "1w": 604800000,
+};
+export const candleSchema = z
+  .object({
+    at: date,
+    open: positive,
+    high: positive,
+    low: positive,
+    close: positive,
+    volume: nonnegative,
+  })
+  .refine(
+    (c) =>
+      D(c.high).gte(c.open) &&
+      D(c.high).gte(c.close) &&
+      D(c.low).lte(c.open) &&
+      D(c.low).lte(c.close) &&
+      D(c.high).gte(c.low),
+    "OHLC高低价关系错误",
+  );
+type Annotation = {
+  branch: number;
+  index: number;
+  price: string;
+  label: string;
+};
+const inputId = z.object({ sessionId: id });
+export async function backtestCommand(action: string, raw: unknown) {
+  switch (action) {
+    case "backtest.create": {
+      const input = z
+        .object({
+          name: text,
+          assetId: id,
+          strategyVersionId: id,
+          timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d", "1w"]),
+          initialCapital: positive,
+          adjustment: z.enum(["RAW", "FORWARD", "BACKWARD"]),
+          feeRate: nonnegative.default("0.001"),
+          slippageBps: nonnegative.default("0"),
+        })
+        .parse(raw);
+      if (D(input.feeRate).gt("0.1") || D(input.slippageBps).gt(1000))
+        throw new Error("费用或滑点参数超出合理输入范围");
+      return db.$transaction(async (tx) => {
+        const a = await tx.asset.findUniqueOrThrow({
+          where: { id: input.assetId },
+        });
+        if (a.assetClass === "CASH") throw new Error("现金不能作为回测标的");
+        const v = await tx.strategyVersion.findUniqueOrThrow({
+          where: { id: input.strategyVersionId },
+          include: { strategy: true },
+        });
+        if (!v.published || v.strategy.archived)
+          throw new Error("请选择活跃策略的已发布版本");
+        const r = await tx.backtestSession.create({
+          data: { ...input, currency: a.currency },
+        });
+        await audit(tx, action, r.id, input);
+        return r;
+      });
+    }
+    case "backtest.import": {
+      const input = z
+        .object({
+          sessionId: id,
+          csv: z.string().max(20_000_000),
+          allowGaps: z.boolean().default(false),
+        })
+        .parse(raw);
+      const parsed = Papa.parse<Record<string, string>>(input.csv, {
+        header: true,
+        skipEmptyLines: "greedy",
+      });
+      if (parsed.errors.length) throw new Error("CSV格式错误");
+      if (!parsed.data.length || parsed.data.length > 50000)
+        throw new Error("需要1至50000根K线");
+      const rows = parsed.data.map((row, index) => {
+        let at = row.at ?? row.timestamp ?? row.time;
+        if (/^\d{10}$/.test(at)) at = new Date(Number(at) * 1000).toISOString();
+        else if (/^\d{13}$/.test(at)) at = new Date(Number(at)).toISOString();
+        const result = candleSchema.safeParse({ ...row, at });
+        if (!result.success)
+          throw new Error(
+            `K线第${index + 2}行：${result.error.issues.map((i) => i.message).join("；")}`,
+          );
+        return result.data;
+      });
+      return db.$transaction(
+        async (tx) => {
+          const session = await tx.backtestSession.findUniqueOrThrow({
+            where: { id: input.sessionId },
+            include: { _count: { select: { candles: true } } },
+          });
+          if (session._count.candles)
+            throw new Error("历史数据已导入，请创建新任务以保留已有回放");
+          const step = timeframes[session.timeframe as keyof typeof timeframes];
+          let gaps = 0;
+          for (let i = 1; i < rows.length; i++) {
+            const delta = rows[i].at.getTime() - rows[i - 1].at.getTime();
+            if (delta <= 0) throw new Error("时间戳必须严格递增，不能重复");
+            if (delta < step) throw new Error("K线间隔小于任务周期");
+            if (delta !== step) gaps++;
+          }
+          if (gaps && !input.allowGaps)
+            throw new Error(
+              `发现${gaps}处时间缺口；确认休市或缺失数据后勾选允许缺口`,
+            );
+          await tx.candle.createMany({
+            data: rows.map((row) => ({ ...row, sessionId: session.id })),
+          });
+          await audit(tx, action, session.id, {
+            count: rows.length,
+            gaps,
+            adjustment: session.adjustment,
+          });
+          return { count: rows.length, gaps };
+        },
+        { timeout: 60000 },
+      );
+    }
+    case "backtest.step": {
+      const input = z
+        .object({ sessionId: id, direction: z.enum(["NEXT", "PREVIOUS"]) })
+        .parse(raw);
+      return db.$transaction(async (tx) => {
+        const s = await tx.backtestSession.findUniqueOrThrow({
+          where: { id: input.sessionId },
+          include: {
+            asset: true,
+            _count: { select: { candles: true } },
+            trades: true,
+          },
+        });
+        const next = s.cursor + (input.direction === "NEXT" ? 1 : -1);
+        if (next < 0 || next >= s._count.candles)
+          throw new Error("已到回放边界");
+        if (input.direction === "PREVIOUS") {
+          const branch = s.branch + 1,
+            prior = s.trades.filter(
+              (t) => t.branch === s.branch && t.entryIndex <= next,
+            );
+          for (const t of prior) {
+            const { id: oldId, ...data } = t;
+            void oldId;
+            const futureExit = t.exitIndex !== null && t.exitIndex > next;
+            await tx.backtestTrade.create({
+              data: {
+                ...data,
+                branch,
+                ...(futureExit
+                  ? {
+                      exit: null,
+                      exitIndex: null,
+                      exitFee: "0",
+                      realized: D(t.fee).neg().toFixed(),
+                    }
+                  : {}),
+              },
+            });
+          }
+          const annotations = JSON.parse(s.annotations) as Annotation[];
+          await tx.backtestSession.update({
+            where: { id: s.id },
+            data: {
+              cursor: next,
+              branch,
+              annotations: JSON.stringify([
+                ...annotations,
+                ...annotations
+                  .filter((a) => a.branch === s.branch && a.index <= next)
+                  .map((a) => ({ ...a, branch })),
+              ]),
+            },
+          });
+          await audit(tx, "BACKTEST_BRANCH", s.id, {
+            from: s.branch,
+            to: branch,
+            cursor: next,
+          });
+        } else {
+          const candle = await tx.candle.findFirstOrThrow({
+            where: { sessionId: s.id },
+            orderBy: { at: "asc" },
+            skip: next,
+          });
+          for (const t of s.trades.filter(
+            (t) => t.branch === s.branch && t.exit === null,
+          )) {
+            const long = t.direction === "LONG";
+            const stopHit = long
+                ? D(candle.low).lte(t.stop)
+                : D(candle.high).gte(t.stop),
+              targetHit = long
+                ? D(candle.high).gte(t.target)
+                : D(candle.low).lte(t.target);
+            if (stopHit || targetHit) {
+              let price = stopHit ? t.stop : t.target;
+              if (
+                stopHit &&
+                (long ? D(candle.open).lt(t.stop) : D(candle.open).gt(t.stop))
+              )
+                price = candle.open;
+              await closeSimulated(tx, s, t, price, next);
+            }
+          }
+          await tx.backtestSession.update({
+            where: { id: s.id },
+            data: { cursor: next },
+          });
+        }
+        return { cursor: next };
+      });
+    }
+    case "backtest.entry": {
+      const input = z
+        .object({
+          sessionId: id,
+          direction,
+          quantity: positive,
+          stop: positive,
+          target: positive,
+        })
+        .parse(raw);
+      return db.$transaction(async (tx) => {
+        const s = await tx.backtestSession.findUniqueOrThrow({
+            where: { id: input.sessionId },
+            include: { asset: true, trades: { where: { exit: null } } },
+          }),
+          c = await tx.candle.findFirstOrThrow({
+            where: { sessionId: s.id },
+            orderBy: { at: "asc" },
+            skip: s.cursor,
+          });
+        if (s.asset.instrument === "SPOT" && input.direction === "SHORT")
+          throw new Error("现货回测不支持无借券卖空");
+        const price = D(c.close).mul(
+          D(1).plus(
+            D(s.slippageBps)
+              .div(10000)
+              .mul(input.direction === "LONG" ? 1 : -1),
+          ),
+        );
+        positionSize({
+          instrument: s.asset.instrument,
+          direction: input.direction,
+          entry: price.toFixed(),
+          stop: input.stop,
+          equity: s.initialCapital,
+          riskPercent: "1",
+          multiplier: s.asset.multiplier,
+        });
+        if (
+          input.direction === "LONG"
+            ? D(input.target).lte(price)
+            : D(input.target).gte(price)
+        )
+          throw new Error("止盈方向错误");
+        const all = await tx.backtestTrade.findMany({
+            where: { sessionId: s.id, branch: s.branch },
+          }),
+          available = D(s.initialCapital)
+            .plus(sum(all.map((t) => t.realized)))
+            .minus(
+              sum(
+                all
+                  .filter((t) => t.exit === null)
+                  .map((t) =>
+                    notional(
+                      s.asset.instrument,
+                      t.quantity,
+                      t.entry,
+                      s.asset.multiplier,
+                    ).toFixed(),
+                  ),
+              ),
+            );
+        const nominal = notional(
+            s.asset.instrument,
+            input.quantity,
+            price.toFixed(),
+            s.asset.multiplier,
+          ),
+          fee = nominal.mul(s.feeRate);
+        if (nominal.plus(fee).gt(available))
+          throw new Error("模拟可用资金不足（保证金按1倍计算）");
+        const r = await tx.backtestTrade.create({
+          data: {
+            sessionId: s.id,
+            branch: s.branch,
+            direction: input.direction,
+            entry: price.toFixed(),
+            stop: input.stop,
+            target: input.target,
+            quantity: input.quantity,
+            fee: fee.toFixed(),
+            realized: fee.neg().toFixed(),
+            entryIndex: s.cursor,
+          },
+        });
+        await audit(tx, action, r.id, { ...input, cursor: s.cursor });
+        return r;
+      });
+    }
+    case "backtest.exit": {
+      const input = z.object({ sessionId: id, tradeId: id }).parse(raw);
+      return db.$transaction(async (tx) => {
+        const s = await tx.backtestSession.findUniqueOrThrow({
+            where: { id: input.sessionId },
+            include: { asset: true },
+          }),
+          t = await tx.backtestTrade.findUniqueOrThrow({
+            where: { id: input.tradeId },
+          });
+        if (t.sessionId !== s.id || t.branch !== s.branch || t.exit !== null)
+          throw new Error("模拟交易不属于当前活动分支或已经平仓");
+        const c = await tx.candle.findFirstOrThrow({
+          where: { sessionId: s.id },
+          orderBy: { at: "asc" },
+          skip: s.cursor,
+        });
+        const r = await closeSimulated(tx, s, t, c.close, s.cursor);
+        await audit(tx, action, r.id, { cursor: s.cursor });
+        return r;
+      });
+    }
+    case "backtest.annotation": {
+      const input = z
+        .object({ sessionId: id, price: positive, label: text })
+        .parse(raw);
+      return db.$transaction(async (tx) => {
+        const s = await tx.backtestSession.findUniqueOrThrow({
+            where: { id: input.sessionId },
+          }),
+          annotations = JSON.parse(s.annotations) as Annotation[];
+        if (annotations.length > 2000) throw new Error("标注数量达到上限");
+        await tx.backtestSession.update({
+          where: { id: s.id },
+          data: {
+            annotations: JSON.stringify([
+              ...annotations,
+              {
+                branch: s.branch,
+                index: s.cursor,
+                price: input.price,
+                label: input.label,
+              },
+            ]),
+          },
+        });
+        await audit(tx, action, s.id, input);
+        return { saved: true };
+      });
+    }
+    default:
+      throw new Error("未知回测操作");
+  }
+}
+function notional(
+  instrument: string,
+  quantity: string,
+  price: string,
+  multiplier: string,
+) {
+  return D(quantity)
+    .mul(multiplier)
+    .mul(instrument === "INVERSE" ? D(1).div(price) : D(price));
+}
+type SimSession = {
+  id: string;
+  feeRate: string;
+  slippageBps: string;
+  asset: { instrument: string; multiplier: string };
+};
+type SimTrade = {
+  id: string;
+  direction: string;
+  quantity: string;
+  entry: string;
+  fee: string;
+};
+async function closeSimulated(
+  tx: Tx,
+  s: SimSession,
+  t: SimTrade,
+  rawPrice: string,
+  index: number,
+) {
+  const price = D(rawPrice).mul(
+      D(1).minus(
+        D(s.slippageBps)
+          .div(10000)
+          .mul(t.direction === "LONG" ? 1 : -1),
+      ),
+    ),
+    fee = notional(
+      s.asset.instrument,
+      t.quantity,
+      price.toFixed(),
+      s.asset.multiplier,
+    ).mul(s.feeRate),
+    realized = contractPnl(
+      s.asset.instrument,
+      t.direction,
+      t.quantity,
+      t.entry,
+      price.toFixed(),
+      s.asset.multiplier,
+    )
+      .minus(t.fee)
+      .minus(fee);
+  return tx.backtestTrade.update({
+    where: { id: t.id },
+    data: {
+      exit: price.toFixed(),
+      exitIndex: index,
+      exitFee: fee.toFixed(),
+      realized: realized.toFixed(),
+    },
+  });
+}
+export async function backtestState(raw: unknown) {
+  const { sessionId } = inputId.parse(raw);
+  return db.$transaction(
+    async (tx) => {
+      const s = await tx.backtestSession.findUniqueOrThrow({
+          where: { id: sessionId },
+          include: { asset: true, _count: { select: { candles: true } } },
+        }),
+        candles = await tx.candle.findMany({
+          where: { sessionId: s.id },
+          orderBy: { at: "asc" },
+          take: s.cursor + 1,
+        }),
+        trades = await tx.backtestTrade.findMany({
+          where: {
+            sessionId: s.id,
+            branch: s.branch,
+            entryIndex: { lte: s.cursor },
+          },
+          orderBy: { entryIndex: "asc" },
+        });
+      const equity = candles.map((c, i) => ({
+        at: c.at.toISOString(),
+        value: D(s.initialCapital)
+          .plus(
+            sum(
+              trades
+                .filter((t) => t.entryIndex <= i)
+                .map((t) =>
+                  t.exitIndex !== null && t.exitIndex <= i
+                    ? t.realized
+                    : contractPnl(
+                        s.asset.instrument,
+                        t.direction,
+                        t.quantity,
+                        t.entry,
+                        c.close,
+                        s.asset.multiplier,
+                      )
+                        .minus(t.fee)
+                        .toFixed(),
+                ),
+            ),
+          )
+          .toFixed(),
+      }));
+      const metrics = tradeMetrics(
+        trades.map((t) => ({
+          realized: t.realized,
+          initialRisk: contractPnl(
+            s.asset.instrument,
+            t.direction,
+            t.quantity,
+            t.entry,
+            t.stop,
+            s.asset.multiplier,
+          )
+            .abs()
+            .toFixed(),
+          openedAt: candles[t.entryIndex].at,
+          closedAt:
+            t.exitIndex !== null ? (candles[t.exitIndex]?.at ?? null) : null,
+        })),
+      );
+      return {
+        session: { ...s, annotations: undefined },
+        candles: candles.map((c) => ({ ...c, at: c.at.toISOString() })),
+        trades,
+        annotations: (JSON.parse(s.annotations) as Annotation[]).filter(
+          (a) => a.branch === s.branch && a.index <= s.cursor,
+        ),
+        report: {
+          ...metrics,
+          equity: equity.at(-1)?.value ?? s.initialCapital,
+          totalReturn: D(equity.at(-1)?.value ?? s.initialCapital)
+            .div(s.initialCapital)
+            .minus(1)
+            .toFixed(),
+          drawdown: maxDrawdown(equity.map((e) => e.value)),
+        },
+        equity,
+      };
+    },
+    { timeout: 30000 },
+  );
+}
+export type BacktestState = Awaited<ReturnType<typeof backtestState>>;

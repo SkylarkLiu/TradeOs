@@ -1,2 +1,32 @@
-import {test,expect} from '@playwright/test';
-test('FIRE可保存目标，备份可预览且校验和完整',async({page,request})=>{await page.goto('/fire');await page.getByRole('button',{name:'保存',exact:true}).click();await expect(page.getByText('退休目标资产（名义）',{exact:true})).toBeVisible();await page.goto('/settings');const r=await request.get('/api/backup');expect(r.ok()).toBe(true);const file=await r.json();const preview=await request.post('/api/command',{data:{action:'backup.preview',input:file}});expect(preview.ok(),await preview.text()).toBe(true);await page.getByLabel('选择JSON备份，先校验并预览').setInputFiles({name:'backup.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(file))});await expect(page.getByText('校验通过，请核对各表记录数量。')).toBeVisible();await expect(page.getByRole('button',{name:'确认恢复（自动保存当前数据）'})).toBeDisabled()});
+import { test, expect } from "@playwright/test";
+test("FIRE可保存目标，备份可预览且校验和完整", async ({ page, request }) => {
+  await page.goto("/fire");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(
+    page.getByText("退休目标资产（名义）", { exact: true }),
+  ).toBeVisible();
+  await page.goto("/settings");
+  const r = await request.get("/api/backup");
+  expect(r.ok()).toBe(true);
+  const file = await r.json();
+  const preview = await request.post("/api/command", {
+    data: { action: "backup.preview", input: file },
+  });
+  expect(preview.ok(), await preview.text()).toBe(true);
+  await page.getByLabel("选择JSON备份，先校验并预览").setInputFiles({
+    name: "backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(file)),
+  });
+  await expect(page.getByText("校验通过，请核对各表记录数量。")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "确认恢复（自动保存当前数据）" }),
+  ).toBeDisabled();
+  await page.getByLabel("已核对备份内容，确认替换当前本地数据").check();
+  await page
+    .getByRole("button", { name: "确认恢复（自动保存当前数据）" })
+    .click();
+  await expect(
+    page.getByText("恢复成功，恢复前备份已保存：", { exact: false }),
+  ).toBeVisible();
+});

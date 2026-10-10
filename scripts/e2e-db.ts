@@ -1,2 +1,3 @@
-import {rmSync} from 'node:fs';
-for(const suffix of ['','-wal','-shm'])rmSync(`data/e2e.db${suffix}`,{force:true});
+import { rmSync } from "node:fs";
+for (const suffix of ["", "-wal", "-shm"])
+  rmSync(`data/e2e.db${suffix}`, { force: true });

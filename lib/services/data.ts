@@ -1,37 +1,541 @@
-import {z} from 'zod';
-import {createHash} from 'node:crypto';
-import {mkdir,writeFile,readFile} from 'node:fs/promises';
-import path from 'node:path';
-import Database from 'better-sqlite3';
-import models from '@/lib/schema-metadata.json';
-import {db} from '@/lib/repositories/db';
-import {D,canonical} from '@/lib/calculations/decimal';
-import {id,date,currency,nonnegative,decimal} from '@/lib/validation/common';
-import {audit,portfolio,type Tx} from './wealth';
+import { z } from "zod";
+import { createHash } from "node:crypto";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
+import path from "node:path";
+import Database from "better-sqlite3";
+import models from "@/lib/schema-metadata.json";
+import { db } from "@/lib/repositories/db";
+import { D, canonical, contractPnl } from "@/lib/calculations/decimal";
+import {
+  id,
+  date,
+  currency,
+  nonnegative,
+  decimal,
+  positive,
+} from "@/lib/validation/common";
+import { scoreRulesSchema } from "./analytics";
+import { candleSchema } from "./backtest";
+import { audit, portfolio, type Tx } from "./wealth";
 // FK dependency order is shared by backup and restore. Relations are not serialized as nested objects.
-export const tables=['platform','account','asset','assetBalance','assetPrice','fXRate','transfer','liability','strategy','strategyVersion','tradingPlan','trade','assetTransaction','tradeFill','positionEvent','tradeReview','tradeAttachment','backtestSession','candle','backtestTrade','accountCashFlow','accountValuation','portfolioSnapshot','assetAllocationSnapshot','financialGoal','importBatch','importRow','syncJob','systemSetting','auditLog'] as const;
-type Row=Record<string,unknown>;
-type Delegate={findMany:()=>Promise<Row[]>;deleteMany:()=>Promise<unknown>;createMany:(args:{data:Row[]})=>Promise<unknown>};
-const delegate=(tx:Tx,table:string)=>(tx as unknown as Record<string,Delegate>)[table];
-const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
+export const tables = [
+  "platform",
+  "account",
+  "asset",
+  "assetBalance",
+  "assetPrice",
+  "fXRate",
+  "transfer",
+  "liability",
+  "strategy",
+  "strategyVersion",
+  "tradingPlan",
+  "trade",
+  "assetTransaction",
+  "tradeFill",
+  "positionEvent",
+  "tradeReview",
+  "tradeAttachment",
+  "backtestSession",
+  "candle",
+  "backtestTrade",
+  "accountCashFlow",
+  "accountValuation",
+  "portfolioSnapshot",
+  "assetAllocationSnapshot",
+  "financialGoal",
+  "importBatch",
+  "importRow",
+  "syncJob",
+  "systemSetting",
+  "auditLog",
+] as const;
+type Row = Record<string, unknown>;
+type Delegate = {
+  findMany: () => Promise<Row[]>;
+  deleteMany: () => Promise<unknown>;
+  createMany: (args: { data: Row[] }) => Promise<unknown>;
+};
+const delegate = (tx: Tx, table: string) =>
+  (tx as unknown as Record<string, Delegate>)[table];
+const hash = (v: unknown) =>
+  createHash("sha256").update(JSON.stringify(v)).digest("hex");
 
-const schemaHash=hash(models.map(m=>({name:m.name,fields:m.fields.filter(f=>f.kind!=='object').map(f=>({name:f.name,type:f.type,required:f.isRequired}))})));
-const money=new Set('quantity cost realized price fee cashDelta costDelta realizedDelta rate amount multiplier entry stop target equity riskPercent initialRisk averageEntry fees leverage margin slippage pnl initialCapital exit exitFee feeRate slippageBps open high low close volume value assets liabilities net investable monthlyContribution monthlyExpense inflation conservative baseReturn optimistic withdrawalRate'.split(' '));
-async function backupFrom(tx:Tx){const data:Record<string,Row[]>={};for(const table of tables)data[table]=await delegate(tx,table).findMany();const payload={app:'TradeOS',version:1,schemaHash,createdAt:new Date().toISOString(),tables:JSON.parse(JSON.stringify(data)) as Record<string,Row[]>};return {payload,checksum:hash(payload)}}
-export async function backup(){return db.$transaction(tx=>backupFrom(tx),{timeout:60000})}
-const envelope=z.object({payload:z.object({app:z.literal('TradeOS'),version:z.literal(1),schemaHash:z.literal(schemaHash),createdAt:z.iso.datetime(),tables:z.record(z.string(),z.array(z.record(z.string(),z.unknown())))}),checksum:z.string()});
-export function validateBackup(raw:unknown){const document=envelope.parse(raw);if(hash(document.payload)!==document.checksum)throw new Error('备份校验和不匹配');if(Object.keys(document.payload.tables).length!==tables.length||tables.some(t=>!document.payload.tables[t]))throw new Error('备份表清单不完整');
- const data:Record<string,Row[]>={};for(const table of tables){const model=models.find(m=>m.name[0].toLowerCase()+m.name.slice(1)===table)!;const fields=model.fields.filter(f=>f.kind!=='object');data[table]=document.payload.tables[table].map((row,index)=>{if(Object.keys(row).length!==fields.length||fields.some(f=>!(f.name in row)))throw new Error(`${table}第${index+1}条字段不完整`);const clean:Row={};for(const field of fields){const value=row[field.name];if(value===null&&!field.isRequired){clean[field.name]=null;continue;}if(field.type==='DateTime'){clean[field.name]=date.parse(value)}else if(field.type==='Boolean'){clean[field.name]=z.boolean().parse(value)}else if(field.type==='Int'){clean[field.name]=z.number().int().safe().parse(value)}else if(field.type==='String'){const str=z.string().max(20_000_000).parse(value);if(money.has(field.name))decimal.parse(str);if(['tags','scores','annotations'].includes(field.name))JSON.parse(str);clean[field.name]=str}else throw new Error('不支持的备份字段类型')}return clean})}
- return {document,data,counts:tables.map(table=>({table,count:data[table].length}))};}
-export async function dataCommand(action:string,raw:unknown){
- if(action==='backup.preview'){const r=validateBackup(raw);return {checksum:r.document.checksum,createdAt:r.document.payload.createdAt,counts:r.counts}}
- if(action==='backup.restore'){const input=z.object({backup:z.unknown(),checksum:z.string()}).parse(raw),validated=validateBackup(input.backup);if(input.checksum!==validated.document.checksum)throw new Error('待恢复文件与预览不一致');return db.$transaction(async tx=>{const previous=await backupFrom(tx),root=path.resolve('data/backups');await mkdir(root,{recursive:true});const file=path.join(root,`before-restore-${Date.now()}-${crypto.randomUUID()}.json`);await writeFile(file,JSON.stringify(previous),{mode:0o600,flag:'wx'});for(const table of [...tables].reverse())await delegate(tx,table).deleteMany();for(const table of tables)if(validated.data[table].length)await delegate(tx,table).createMany({data:validated.data[table]});const diff=await ledgerCheck(tx);if(diff.some(d=>d.status!=='MATCH'))throw new Error('恢复后账本与余额不一致，已回滚；恢复前备份已保存');await audit(tx,'BACKUP_RESTORE',validated.document.checksum,{beforeBackup:path.basename(file)});return {restored:true,beforeBackup:path.basename(file)}},{timeout:120000})}
- if(action==='reconcile.check'){const input=z.object({accountId:id,value:nonnegative,currency,at:date}).parse(raw);return db.$transaction(async tx=>{const p=await portfolio(input.currency,input.at,tx),rows=p.rows.filter(r=>r.accountId===input.accountId);const value=rows.reduce((s,r)=>s.plus(r.value??0),D(0));let complete=rows.every(r=>r.status==='VALID');const contracts=await tx.trade.findMany({where:{accountId:input.accountId,status:'OPEN',asset:{instrument:{not:'SPOT'}}},include:{asset:true}});if(contracts.some(t=>D(t.quantity).gt(0))){complete=false}const inTransit=await tx.transfer.count({where:{fromId:input.accountId,status:'IN_TRANSIT'}});if(inTransit)complete=false;const future=await tx.assetTransaction.count({where:{accountId:input.accountId,at:{gt:input.at}}});if(future)complete=false;const actual=D(input.value);await tx.accountValuation.upsert({where:{accountId_at:{accountId:input.accountId,at:input.at}},create:{accountId:input.accountId,value:input.value,currency:input.currency,at:input.at,source:'RECONCILIATION'},update:{value:input.value,currency:input.currency,source:'RECONCILIATION'}});await audit(tx,action,input.accountId,input);return {system:canonical(value),actual:input.value,difference:complete?actual.minus(value).toFixed():null,complete,note:complete?'差异仅供核对，修正需单独录入调整流水':'存在历史时点、在途、合约或缺失估值，不能直接比较当前余额',ledger:await ledgerCheck(tx)}})}
- if(action==='ledger.check')return ledgerCheck(db);
- if(action==='setting.save'){const input=z.object({key:z.enum(['reportCurrency','priceStaleDays']),value:z.string()}).parse(raw);if(input.key==='reportCurrency')currency.parse(input.value);else z.coerce.number().int().min(1).max(365).parse(input.value);return db.$transaction(async tx=>{const r=await tx.systemSetting.upsert({where:{key:input.key},create:input,update:{value:input.value}});await audit(tx,action,input.key,input);return r})}
- throw new Error('未知数据操作');
+const schemaHash = hash(
+  models.map((m) => ({
+    name: m.name,
+    fields: m.fields
+      .filter((f) => f.kind !== "object")
+      .map((f) => ({ name: f.name, type: f.type, required: f.isRequired })),
+  })),
+);
+const money = new Set(
+  "quantity cost realized price fee cashDelta costDelta realizedDelta rate amount multiplier entry stop target equity riskPercent initialRisk averageEntry fees leverage margin slippage pnl initialCapital exit exitFee feeRate slippageBps open high low close volume value assets liabilities net investable monthlyContribution monthlyExpense inflation conservative baseReturn optimistic withdrawalRate".split(
+    " ",
+  ),
+);
+async function backupFrom(tx: Tx) {
+  const data: Record<string, Row[]> = {};
+  for (const table of tables)
+    data[table] = await delegate(tx, table).findMany();
+  const payload = {
+    app: "TradeOS",
+    version: 1,
+    schemaHash,
+    createdAt: new Date().toISOString(),
+    tables: JSON.parse(JSON.stringify(data)) as Record<string, Row[]>,
+  };
+  return { payload, checksum: hash(payload) };
 }
-export async function ledgerCheck(tx:Tx){const [transactions,assets,balances]=await Promise.all([tx.assetTransaction.findMany({include:{asset:true},orderBy:{at:'asc'}}),tx.asset.findMany(),tx.assetBalance.findMany()]);const expected=new Map<string,{quantity:ReturnType<typeof D>;cost:ReturnType<typeof D>;realized:ReturnType<typeof D>}>();const add=(accountId:string,assetId:string,q:string,c:string,r='0')=>{const key=`${accountId}:${assetId}`,b=expected.get(key)??{quantity:D(0),cost:D(0),realized:D(0)};b.quantity=b.quantity.plus(q);b.cost=b.cost.plus(c);b.realized=b.realized.plus(r);expected.set(key,b)};
- for(const t of transactions){if(t.asset.instrument==='SPOT'){if(t.asset.assetClass==='CASH')add(t.accountId,t.assetId,t.cashDelta,t.cashDelta,t.realizedDelta);else add(t.accountId,t.assetId,t.quantity,t.costDelta,t.realizedDelta)}if(t.asset.assetClass!=='CASH'&&!D(t.cashDelta).eq(0)){const cash=assets.find(a=>a.code===`CASH:${t.currency}`);if(!cash)throw new Error('账本缺少结算现金资产');add(t.accountId,cash.id,t.cashDelta,t.cashDelta)}}
- const keys=new Set([...expected.keys(),...balances.map(b=>`${b.accountId}:${b.assetId}`)]);return [...keys].map(key=>{const b=balances.find(b=>`${b.accountId}:${b.assetId}`===key),e=expected.get(key)??{quantity:D(0),cost:D(0),realized:D(0)};const match=b?D(b.quantity).eq(e.quantity)&&D(b.cost).minus(e.cost).abs().lt('0.000000000000000001')&&D(b.realized).minus(e.realized).abs().lt('0.000000000000000001'):e.quantity.eq(0)&&e.cost.eq(0)&&e.realized.eq(0);return {accountId:b?.accountId??key.slice(0,key.indexOf(':')),assetId:b?.assetId??key.slice(key.indexOf(':')+1),recorded:b?.quantity??'0',expected:e.quantity.toFixed(),status:match?'MATCH':'MISMATCH'}})}
-export async function databaseBackup(){const filename=path.resolve((process.env.DATABASE_URL??'file:./data/tradeos.db').replace(/^file:/,'')),folder=path.resolve('data/backups');await mkdir(folder,{recursive:true});const file=path.join(folder,`database-${Date.now()}-${crypto.randomUUID()}.db`),connection=new Database(filename);try{await connection.backup(file)}finally{connection.close()}return readFile(file)}
+export async function backup() {
+  return db.$transaction((tx) => backupFrom(tx), { timeout: 60000 });
+}
+const envelope = z.object({
+  payload: z.object({
+    app: z.literal("TradeOS"),
+    version: z.literal(1),
+    schemaHash: z.literal(schemaHash),
+    createdAt: z.iso.datetime(),
+    tables: z.record(z.string(), z.array(z.record(z.string(), z.unknown()))),
+  }),
+  checksum: z.string(),
+});
+export function validateBackup(raw: unknown) {
+  const document = envelope.parse(raw);
+  if (hash(document.payload) !== document.checksum)
+    throw new Error("备份校验和不匹配");
+  if (
+    Object.keys(document.payload.tables).length !== tables.length ||
+    tables.some((t) => !document.payload.tables[t])
+  )
+    throw new Error("备份表清单不完整");
+  const data: Record<string, Row[]> = {};
+  for (const table of tables) {
+    const model = models.find(
+      (m) => m.name[0].toLowerCase() + m.name.slice(1) === table,
+    )!;
+    const fields = model.fields.filter((f) => f.kind !== "object");
+    data[table] = document.payload.tables[table].map((row, index) => {
+      if (
+        Object.keys(row).length !== fields.length ||
+        fields.some((f) => !(f.name in row))
+      )
+        throw new Error(`${table}第${index + 1}条字段不完整`);
+      const clean: Row = {};
+      for (const field of fields) {
+        const value = row[field.name];
+        if (value === null && !field.isRequired) {
+          clean[field.name] = null;
+          continue;
+        }
+        if (field.type === "DateTime") {
+          clean[field.name] = date.parse(value);
+        } else if (field.type === "Boolean") {
+          clean[field.name] = z.boolean().parse(value);
+        } else if (field.type === "Int") {
+          clean[field.name] = z.number().int().safe().parse(value);
+        } else if (field.type === "String") {
+          const str = z.string().max(20_000_000).parse(value);
+          if (field.name === "id" || field.name === "key") id.parse(str);
+          if (["currency", "from", "to"].includes(field.name))
+            currency.parse(str);
+          if (
+            ["AssetBalance", "Trade", "BacktestTrade", "Transfer"].includes(
+              model.name,
+            ) &&
+            [
+              "quantity",
+              "cost",
+              "margin",
+              "leverage",
+              "fee",
+              "exitFee",
+            ].includes(field.name)
+          )
+            nonnegative.parse(str);
+          if (money.has(field.name)) decimal.parse(str);
+          if (field.name === "mime" && model.name === "TradeAttachment")
+            z.enum(["image/png", "image/jpeg", "image/webp"]).parse(str);
+          if (field.name === "data" && model.name === "TradeAttachment")
+            z.string()
+              .max(7_000_000)
+              .regex(/^[A-Za-z0-9+/]+=*$/)
+              .parse(str);
+          if (field.name === "direction") z.enum(["LONG", "SHORT"]).parse(str);
+          if (field.name === "instrument")
+            z.enum(["SPOT", "LINEAR", "INVERSE"]).parse(str);
+          if (field.name === "leverage" || field.name === "multiplier")
+            positive.parse(str);
+          if (field.name === "tags")
+            z.array(z.string().max(60)).max(30).parse(JSON.parse(str));
+          if (field.name === "annotations")
+            z.array(
+              z.object({
+                branch: z.number().int().positive(),
+                index: z.number().int().nonnegative(),
+                price: positive,
+                label: z.string().min(1).max(300),
+              }),
+            ).parse(JSON.parse(str));
+          if (field.name === "scores") {
+            const parsed = z
+              .object({
+                values: z.record(z.string(), z.number().nonnegative()),
+                rules: scoreRulesSchema,
+              })
+              .parse(JSON.parse(str));
+            if (
+              parsed.rules.some(
+                (r) =>
+                  parsed.values[r.name] === undefined ||
+                  parsed.values[r.name] > r.max,
+              )
+            )
+              throw new Error("历史评分超出规则范围");
+          }
+          if (
+            model.name === "SystemSetting" &&
+            row.key === "scoreRules" &&
+            field.name === "value"
+          )
+            scoreRulesSchema.parse(JSON.parse(str));
+          if (
+            model.name === "SystemSetting" &&
+            row.key === "priceStaleDays" &&
+            field.name === "value"
+          )
+            z.coerce.number().int().min(1).max(365).parse(str);
+          clean[field.name] = str;
+        } else throw new Error("不支持的备份字段类型");
+      }
+      if (model.name === "Candle")
+        candleSchema.parse({ ...clean, at: (clean.at as Date).toISOString() });
+      return clean;
+    });
+  }
+  return {
+    document,
+    data,
+    counts: tables.map((table) => ({ table, count: data[table].length })),
+  };
+}
+export async function dataCommand(action: string, raw: unknown) {
+  if (action === "backup.preview") {
+    const r = validateBackup(raw);
+    return {
+      checksum: r.document.checksum,
+      createdAt: r.document.payload.createdAt,
+      counts: r.counts,
+    };
+  }
+  if (action === "backup.restore") {
+    const input = z
+        .object({ backup: z.unknown(), checksum: z.string() })
+        .parse(raw),
+      validated = validateBackup(input.backup);
+    if (input.checksum !== validated.document.checksum)
+      throw new Error("待恢复文件与预览不一致");
+    return db.$transaction(
+      async (tx) => {
+        const previous = await backupFrom(tx),
+          root = path.resolve("data/backups");
+        await mkdir(root, { recursive: true });
+        const file = path.join(
+          root,
+          `before-restore-${Date.now()}-${crypto.randomUUID()}.json`,
+        );
+        await writeFile(file, JSON.stringify(previous), {
+          mode: 0o600,
+          flag: "wx",
+        });
+        for (const table of [...tables].reverse())
+          await delegate(tx, table).deleteMany();
+        for (const table of tables)
+          if (validated.data[table].length)
+            await delegate(tx, table).createMany({
+              data: validated.data[table],
+            });
+        const diff = await ledgerCheck(tx);
+        if (diff.some((d) => d.status !== "MATCH"))
+          throw new Error("恢复后账本与余额不一致，已回滚；恢复前备份已保存");
+        await validateFinancialLinks(tx);
+        await audit(tx, "BACKUP_RESTORE", validated.document.checksum, {
+          beforeBackup: path.basename(file),
+        });
+        return { restored: true, beforeBackup: path.basename(file) };
+      },
+      { timeout: 120000 },
+    );
+  }
+  if (action === "reconcile.check") {
+    const input = z
+      .object({ accountId: id, value: nonnegative, currency, at: date })
+      .parse(raw);
+    return db.$transaction(async (tx) => {
+      const p = await portfolio(input.currency, input.at, tx),
+        rows = p.rows.filter((r) => r.accountId === input.accountId);
+      const value = rows.reduce((s, r) => s.plus(r.value ?? 0), D(0));
+      let complete = rows.every((r) => r.status === "VALID");
+      const contracts = await tx.trade.findMany({
+        where: {
+          accountId: input.accountId,
+          status: "OPEN",
+          asset: { instrument: { not: "SPOT" } },
+        },
+        include: { asset: true },
+      });
+      if (contracts.some((t) => D(t.quantity).gt(0))) {
+        complete = false;
+      }
+      const inTransit = await tx.transfer.count({
+        where: { fromId: input.accountId, status: "IN_TRANSIT" },
+      });
+      if (inTransit) complete = false;
+      const actual = D(input.value);
+      await tx.accountValuation.upsert({
+        where: { accountId_at: { accountId: input.accountId, at: input.at } },
+        create: {
+          accountId: input.accountId,
+          value: input.value,
+          currency: input.currency,
+          at: input.at,
+          source: "RECONCILIATION",
+        },
+        update: {
+          value: input.value,
+          currency: input.currency,
+          source: "RECONCILIATION",
+        },
+      });
+      await audit(tx, action, input.accountId, input);
+      return {
+        system: canonical(value),
+        actual: input.value,
+        difference: complete ? actual.minus(value).toFixed() : null,
+        complete,
+        note: complete
+          ? "差异仅供核对，修正需单独录入调整流水"
+          : "存在在途、合约或缺失估值，不能直接比较账户估值",
+        ledger: await ledgerCheck(tx),
+      };
+    });
+  }
+  if (action === "ledger.check") return ledgerCheck(db);
+  if (action === "setting.save") {
+    const input = z
+      .object({
+        key: z.enum(["reportCurrency", "priceStaleDays"]),
+        value: z.string(),
+      })
+      .parse(raw);
+    if (input.key === "reportCurrency") currency.parse(input.value);
+    else z.coerce.number().int().min(1).max(365).parse(input.value);
+    return db.$transaction(async (tx) => {
+      const r = await tx.systemSetting.upsert({
+        where: { key: input.key },
+        create: input,
+        update: { value: input.value },
+      });
+      await audit(tx, action, input.key, input);
+      return r;
+    });
+  }
+  throw new Error("未知数据操作");
+}
+export async function ledgerCheck(tx: Tx) {
+  const [transactions, assets, balances] = await Promise.all([
+    tx.assetTransaction.findMany({
+      include: { asset: true },
+      orderBy: [{ at: "asc" }, { sequence: "asc" }],
+    }),
+    tx.asset.findMany(),
+    tx.assetBalance.findMany(),
+  ]);
+  const expected = new Map<
+    string,
+    {
+      quantity: ReturnType<typeof D>;
+      cost: ReturnType<typeof D>;
+      realized: ReturnType<typeof D>;
+    }
+  >();
+  const add = (
+    accountId: string,
+    assetId: string,
+    q: string,
+    c: string,
+    r = "0",
+  ) => {
+    const key = `${accountId}:${assetId}`,
+      b = expected.get(key) ?? { quantity: D(0), cost: D(0), realized: D(0) };
+    b.quantity = b.quantity.plus(q);
+    b.cost = b.cost.plus(c);
+    b.realized = b.realized.plus(r);
+    expected.set(key, b);
+  };
+  for (const t of transactions) {
+    if (t.asset.instrument === "SPOT") {
+      if (t.asset.assetClass === "CASH")
+        add(t.accountId, t.assetId, t.cashDelta, t.cashDelta, t.realizedDelta);
+      else
+        add(t.accountId, t.assetId, t.quantity, t.costDelta, t.realizedDelta);
+    }
+    if (t.asset.assetClass !== "CASH" && !D(t.cashDelta).eq(0)) {
+      const cash = assets.find((a) => a.code === `CASH:${t.currency}`);
+      if (!cash) throw new Error("账本缺少结算现金资产");
+      add(t.accountId, cash.id, t.cashDelta, t.cashDelta);
+    }
+  }
+  const keys = new Set([
+    ...expected.keys(),
+    ...balances.map((b) => `${b.accountId}:${b.assetId}`),
+  ]);
+  return [...keys].map((key) => {
+    const b = balances.find((b) => `${b.accountId}:${b.assetId}` === key),
+      e = expected.get(key) ?? { quantity: D(0), cost: D(0), realized: D(0) };
+    const match = b
+      ? D(b.quantity).eq(e.quantity) &&
+        D(b.cost).minus(e.cost).abs().lt("0.000000000000000001") &&
+        D(b.realized).minus(e.realized).abs().lt("0.000000000000000001")
+      : e.quantity.eq(0) && e.cost.eq(0) && e.realized.eq(0);
+    return {
+      accountId: b?.accountId ?? key.slice(0, key.indexOf(":")),
+      assetId: b?.assetId ?? key.slice(key.indexOf(":") + 1),
+      recorded: b?.quantity ?? "0",
+      expected: e.quantity.toFixed(),
+      status: match ? "MATCH" : "MISMATCH",
+    };
+  });
+}
+export async function databaseBackup() {
+  const filename = path.resolve(
+      (process.env.DATABASE_URL ?? "file:./data/tradeos.db").replace(
+        /^file:/,
+        "",
+      ),
+    ),
+    folder = path.resolve("data/backups");
+  await mkdir(folder, { recursive: true });
+  const file = path.join(
+      folder,
+      `database-${Date.now()}-${crypto.randomUUID()}.db`,
+    ),
+    connection = new Database(filename);
+  try {
+    await connection.backup(file);
+  } finally {
+    connection.close();
+  }
+  return readFile(file);
+}
+
+async function validateFinancialLinks(tx: Tx) {
+  const trades = await tx.trade.findMany({
+    include: {
+      asset: true,
+      fills: {
+        include: { transaction: true },
+        orderBy: [{ at: "asc" }, { sequence: "asc" }],
+      },
+    },
+  });
+  for (const t of trades) {
+    let quantity = D(0),
+      average = D(0),
+      realized = D(0),
+      fees = D(0);
+    for (const f of t.fills) {
+      const entry = f.action === "ENTRY";
+      if (
+        !["ENTRY", "EXIT"].includes(f.action) ||
+        D(f.quantity).lte(0) ||
+        D(f.price).lte(0) ||
+        D(f.fee).lt(0) ||
+        f.at < t.openedAt
+      )
+        throw new Error("成交数据无效");
+      if (!entry && D(f.quantity).gt(quantity))
+        throw new Error("平仓数量超出持仓");
+      const pnl = entry
+          ? D(f.fee).neg()
+          : contractPnl(
+              t.asset.instrument,
+              t.direction,
+              f.quantity,
+              average.toFixed(),
+              f.price,
+              t.asset.multiplier,
+            ).minus(f.fee),
+        ledger = f.transaction,
+        cash =
+          t.asset.instrument === "SPOT"
+            ? D(f.quantity)
+                .mul(f.price)
+                .mul(entry ? -1 : 1)
+                .minus(f.fee)
+            : pnl;
+      if (
+        !D(f.pnl).eq(pnl) ||
+        ledger.accountId !== t.accountId ||
+        ledger.assetId !== t.assetId ||
+        ledger.at.getTime() !== f.at.getTime() ||
+        !D(ledger.quantity).eq(D(f.quantity).mul(entry ? 1 : -1)) ||
+        !D(ledger.price).eq(f.price) ||
+        !D(ledger.fee).eq(f.fee) ||
+        !D(ledger.cashDelta).eq(cash)
+      )
+        throw new Error("成交与账本关联不一致");
+      const next = entry
+        ? quantity.plus(f.quantity)
+        : quantity.minus(f.quantity);
+      if (entry)
+        average =
+          t.asset.instrument === "INVERSE" && quantity.gt(0)
+            ? next.div(quantity.div(average).plus(D(f.quantity).div(f.price)))
+            : quantity.mul(average).plus(D(f.quantity).mul(f.price)).div(next);
+      quantity = next;
+      realized = realized.plus(pnl);
+      fees = fees.plus(f.fee);
+    }
+    const closed = t.fills.length > 0 && quantity.eq(0),
+      margin =
+        t.asset.instrument === "SPOT" || quantity.eq(0)
+          ? D(0)
+          : quantity
+              .mul(t.asset.multiplier)
+              .mul(
+                t.asset.instrument === "INVERSE" ? D(1).div(average) : average,
+              )
+              .div(t.leverage);
+    if (
+      !quantity.eq(t.quantity) ||
+      !average.eq(t.averageEntry) ||
+      !realized.eq(t.realized) ||
+      !fees.eq(t.fees) ||
+      !margin.eq(t.margin) ||
+      t.status !== (closed ? "CLOSED" : "OPEN") ||
+      (closed
+        ? t.closedAt?.getTime() !== t.fills.at(-1)!.at.getTime()
+        : t.closedAt !== null)
+    )
+      throw new Error("交易汇总与成交不一致");
+  }
+  const simulated = await tx.backtestTrade.findMany({
+    include: { session: { include: { asset: true } } },
+  });
+  for (const t of simulated) {
+    const expected = t.exit
+      ? contractPnl(
+          t.session.asset.instrument,
+          t.direction,
+          t.quantity,
+          t.entry,
+          t.exit,
+          t.session.asset.multiplier,
+        )
+          .minus(t.fee)
+          .minus(t.exitFee)
+      : D(t.fee).neg();
+    if (!expected.eq(t.realized)) throw new Error("模拟交易收益不一致");
+  }
+}

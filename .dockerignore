@@ -1,0 +1,11 @@
+node_modules
+.next
+.next-e2e
+generated
+next-env.d.ts
+data
+.git
+.env
+test-results
+playwright-report
+.impeccable

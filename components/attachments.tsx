@@ -1,6 +1,92 @@
-'use client';
-import {useState} from 'react';
-import Image from 'next/image';
-import {mutate} from './form';
-import {useWorkspace} from './workspace';
-export function Attachments({tradeId,strategyVersionId,rows,locked=false}:{tradeId?:string;strategyVersionId?:string;rows:{id:string;name:string;mime:string}[];locked?:boolean}){const {refresh}=useWorkspace(),[error,setError]=useState(''),[busy,setBusy]=useState(false);return <div>{!locked&&<label className="field">添加截图（PNG/JPEG/WebP，最多5MB）<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={async e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>5*1024*1024){setError('图片超过5MB');return;}setBusy(true);try{const buffer=await file.arrayBuffer();let binary='';for(const b of new Uint8Array(buffer))binary+=String.fromCharCode(b);await mutate('attachment.create',{tradeId,strategyVersionId,name:file.name,mime:file.type,data:btoa(binary)});refresh();setError('')}catch(e){setError((e as Error).message)}finally{setBusy(false)}}}/></label>}{error&&<p className="error" role="alert">{error}</p>}<div className="equal-col">{rows.map(r=><a key={r.id} href={`/api/attachment?id=${r.id}`} target="_blank" rel="noreferrer"><Image src={`/api/attachment?id=${r.id}`} alt={r.name} width={600} height={360} unoptimized style={{width:'100%',height:'auto',maxHeight:360,objectFit:'contain'}}/><div className="detail">{r.name}</div></a>)}</div></div>}
+"use client";
+import { useState } from "react";
+import Image from "next/image";
+import { mutate } from "./form";
+import { useWorkspace } from "./workspace";
+export function Attachments({
+  tradeId,
+  strategyVersionId,
+  rows,
+  locked = false,
+}: {
+  tradeId?: string;
+  strategyVersionId?: string;
+  rows: { id: string; name: string; mime: string }[];
+  locked?: boolean;
+}) {
+  const { refresh } = useWorkspace(),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
+  return (
+    <div>
+      {!locked && (
+        <label className="field">
+          添加截图（PNG/JPEG/WebP，最多5MB）
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            disabled={busy}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              if (file.size > 5 * 1024 * 1024) {
+                setError("图片超过5MB");
+                return;
+              }
+              setBusy(true);
+              try {
+                const buffer = await file.arrayBuffer();
+                let binary = "";
+                for (const b of new Uint8Array(buffer))
+                  binary += String.fromCharCode(b);
+                await mutate("attachment.create", {
+                  tradeId,
+                  strategyVersionId,
+                  name: file.name,
+                  mime: file.type,
+                  data: btoa(binary),
+                });
+                refresh();
+                setError("");
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        </label>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="equal-col">
+        {rows.map((r) => (
+          <a
+            key={r.id}
+            href={`/api/attachment?id=${r.id}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Image
+              src={`/api/attachment?id=${r.id}`}
+              alt={r.name}
+              width={600}
+              height={360}
+              unoptimized
+              style={{
+                width: "100%",
+                height: "auto",
+                maxHeight: 360,
+                objectFit: "contain",
+              }}
+            />
+            <div className="detail">{r.name}</div>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}

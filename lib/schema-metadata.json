@@ -255,6 +255,12 @@
     "name": "AssetTransaction",
     "fields": [
       {
+        "name": "sequence",
+        "type": "Int",
+        "kind": "scalar",
+        "isRequired": true
+      },
+      {
         "name": "id",
         "type": "String",
         "kind": "scalar",
@@ -775,6 +781,12 @@
   {
     "name": "TradeFill",
     "fields": [
+      {
+        "name": "sequence",
+        "type": "Int",
+        "kind": "scalar",
+        "isRequired": true
+      },
       {
         "name": "id",
         "type": "String",

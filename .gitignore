@@ -7,3 +7,6 @@ data/
 playwright-report/
 test-results/
 .impeccable/
+
+.next-e2e/
+next-env.d.ts

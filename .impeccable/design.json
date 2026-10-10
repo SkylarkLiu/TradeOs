@@ -1,0 +1,644 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-10T02:51:55.758638+00:00",
+  "title": "Design System: TradeOS",
+  "extensions": {
+    "colorMeta": {
+      "bg": {
+        "role": "neutral",
+        "displayName": "深色主题工作台底色",
+        "tonalRamp": [
+          "oklch(15.0% 0.01198 254.12)",
+          "oklch(26.43% 0.01198 254.12)",
+          "oklch(37.86% 0.01198 254.12)",
+          "oklch(49.29% 0.01198 254.12)",
+          "oklch(60.71% 0.01198 254.12)",
+          "oklch(72.14% 0.01198 254.12)",
+          "oklch(83.57% 0.01198 254.12)",
+          "oklch(95.0% 0.01198 254.12)"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "深色主题面板色",
+        "tonalRamp": [
+          "oklch(15.0% 0.01631 252.47)",
+          "oklch(26.43% 0.01631 252.47)",
+          "oklch(37.86% 0.01631 252.47)",
+          "oklch(49.29% 0.01631 252.47)",
+          "oklch(60.71% 0.01631 252.47)",
+          "oklch(72.14% 0.01631 252.47)",
+          "oklch(83.57% 0.01631 252.47)",
+          "oklch(95.0% 0.01631 252.47)"
+        ]
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "深色主题抬升层",
+        "tonalRamp": [
+          "oklch(15.0% 0.02048 251.61)",
+          "oklch(26.43% 0.02048 251.61)",
+          "oklch(37.86% 0.02048 251.61)",
+          "oklch(49.29% 0.02048 251.61)",
+          "oklch(60.71% 0.02048 251.61)",
+          "oklch(72.14% 0.02048 251.61)",
+          "oklch(83.57% 0.02048 251.61)",
+          "oklch(95.0% 0.02048 251.61)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "深色主题边界色",
+        "tonalRamp": [
+          "oklch(15.0% 0.02538 253.2)",
+          "oklch(26.43% 0.02538 253.2)",
+          "oklch(37.86% 0.02538 253.2)",
+          "oklch(49.29% 0.02538 253.2)",
+          "oklch(60.71% 0.02538 253.2)",
+          "oklch(72.14% 0.02538 253.2)",
+          "oklch(83.57% 0.02538 253.2)",
+          "oklch(95.0% 0.02538 253.2)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "深色主题正文色",
+        "tonalRamp": [
+          "oklch(15.0% 0.0097 252.81)",
+          "oklch(26.43% 0.0097 252.81)",
+          "oklch(37.86% 0.0097 252.81)",
+          "oklch(49.29% 0.0097 252.81)",
+          "oklch(60.71% 0.0097 252.81)",
+          "oklch(72.14% 0.0097 252.81)",
+          "oklch(83.57% 0.0097 252.81)",
+          "oklch(95.0% 0.0097 252.81)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "深色主题辅助文字色",
+        "tonalRamp": [
+          "oklch(15.0% 0.02731 253.62)",
+          "oklch(26.43% 0.02731 253.62)",
+          "oklch(37.86% 0.02731 253.62)",
+          "oklch(49.29% 0.02731 253.62)",
+          "oklch(60.71% 0.02731 253.62)",
+          "oklch(72.14% 0.02731 253.62)",
+          "oklch(83.57% 0.02731 253.62)",
+          "oklch(95.0% 0.02731 253.62)"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "深色主题薄荷强调色",
+        "tonalRamp": [
+          "oklch(15.0% 0.11538 170.24)",
+          "oklch(26.43% 0.11538 170.24)",
+          "oklch(37.86% 0.11538 170.24)",
+          "oklch(49.29% 0.11538 170.24)",
+          "oklch(60.71% 0.11538 170.24)",
+          "oklch(72.14% 0.11538 170.24)",
+          "oklch(83.57% 0.11538 170.24)",
+          "oklch(95.0% 0.11538 170.24)"
+        ]
+      },
+      "danger": {
+        "role": "secondary",
+        "displayName": "深色主题风险色",
+        "tonalRamp": [
+          "oklch(15.0% 0.13141 15.89)",
+          "oklch(26.43% 0.13141 15.89)",
+          "oklch(37.86% 0.13141 15.89)",
+          "oklch(49.29% 0.13141 15.89)",
+          "oklch(60.71% 0.13141 15.89)",
+          "oklch(72.14% 0.13141 15.89)",
+          "oklch(83.57% 0.13141 15.89)",
+          "oklch(95.0% 0.13141 15.89)"
+        ]
+      },
+      "positive": {
+        "role": "primary",
+        "displayName": "深色主题收益色",
+        "tonalRamp": [
+          "oklch(15.0% 0.11538 170.24)",
+          "oklch(26.43% 0.11538 170.24)",
+          "oklch(37.86% 0.11538 170.24)",
+          "oklch(49.29% 0.11538 170.24)",
+          "oklch(60.71% 0.11538 170.24)",
+          "oklch(72.14% 0.11538 170.24)",
+          "oklch(83.57% 0.11538 170.24)",
+          "oklch(95.0% 0.11538 170.24)"
+        ]
+      },
+      "input": {
+        "role": "neutral",
+        "displayName": "深色主题输入底色",
+        "tonalRamp": [
+          "oklch(15.0% 0.0168 252.54)",
+          "oklch(26.43% 0.0168 252.54)",
+          "oklch(37.86% 0.0168 252.54)",
+          "oklch(49.29% 0.0168 252.54)",
+          "oklch(60.71% 0.0168 252.54)",
+          "oklch(72.14% 0.0168 252.54)",
+          "oklch(83.57% 0.0168 252.54)",
+          "oklch(95.0% 0.0168 252.54)"
+        ]
+      },
+      "light-bg": {
+        "role": "neutral",
+        "displayName": "浅色主题工作台底色",
+        "tonalRamp": [
+          "oklch(15.0% 0.00343 247.86)",
+          "oklch(26.43% 0.00343 247.86)",
+          "oklch(37.86% 0.00343 247.86)",
+          "oklch(49.29% 0.00343 247.86)",
+          "oklch(60.71% 0.00343 247.86)",
+          "oklch(72.14% 0.00343 247.86)",
+          "oklch(83.57% 0.00343 247.86)",
+          "oklch(95.0% 0.00343 247.86)"
+        ]
+      },
+      "light-panel": {
+        "role": "neutral",
+        "displayName": "浅色主题面板色",
+        "tonalRamp": [
+          "oklch(15.0% 0.0 0)",
+          "oklch(26.43% 0.0 0)",
+          "oklch(37.86% 0.0 0)",
+          "oklch(49.29% 0.0 0)",
+          "oklch(60.71% 0.0 0)",
+          "oklch(72.14% 0.0 0)",
+          "oklch(83.57% 0.0 0)",
+          "oklch(95.0% 0.0 0)"
+        ]
+      },
+      "light-raised": {
+        "role": "neutral",
+        "displayName": "浅色主题抬升层",
+        "tonalRamp": [
+          "oklch(15.0% 0.00506 228.82)",
+          "oklch(26.43% 0.00506 228.82)",
+          "oklch(37.86% 0.00506 228.82)",
+          "oklch(49.29% 0.00506 228.82)",
+          "oklch(60.71% 0.00506 228.82)",
+          "oklch(72.14% 0.00506 228.82)",
+          "oklch(83.57% 0.00506 228.82)",
+          "oklch(95.0% 0.00506 228.82)"
+        ]
+      },
+      "light-line": {
+        "role": "neutral",
+        "displayName": "浅色主题边界色",
+        "tonalRamp": [
+          "oklch(15.0% 0.01196 239.92)",
+          "oklch(26.43% 0.01196 239.92)",
+          "oklch(37.86% 0.01196 239.92)",
+          "oklch(49.29% 0.01196 239.92)",
+          "oklch(60.71% 0.01196 239.92)",
+          "oklch(72.14% 0.01196 239.92)",
+          "oklch(83.57% 0.01196 239.92)",
+          "oklch(95.0% 0.01196 239.92)"
+        ]
+      },
+      "light-text": {
+        "role": "neutral",
+        "displayName": "浅色主题正文色",
+        "tonalRamp": [
+          "oklch(15.0% 0.03321 242.39)",
+          "oklch(26.43% 0.03321 242.39)",
+          "oklch(37.86% 0.03321 242.39)",
+          "oklch(49.29% 0.03321 242.39)",
+          "oklch(60.71% 0.03321 242.39)",
+          "oklch(72.14% 0.03321 242.39)",
+          "oklch(83.57% 0.03321 242.39)",
+          "oklch(95.0% 0.03321 242.39)"
+        ]
+      },
+      "light-muted": {
+        "role": "neutral",
+        "displayName": "浅色主题辅助文字色",
+        "tonalRamp": [
+          "oklch(15.0% 0.03447 243.94)",
+          "oklch(26.43% 0.03447 243.94)",
+          "oklch(37.86% 0.03447 243.94)",
+          "oklch(49.29% 0.03447 243.94)",
+          "oklch(60.71% 0.03447 243.94)",
+          "oklch(72.14% 0.03447 243.94)",
+          "oklch(83.57% 0.03447 243.94)",
+          "oklch(95.0% 0.03447 243.94)"
+        ]
+      },
+      "light-accent": {
+        "role": "primary",
+        "displayName": "浅色主题薄荷强调色",
+        "tonalRamp": [
+          "oklch(15.0% 0.08815 170.4)",
+          "oklch(26.43% 0.08815 170.4)",
+          "oklch(37.86% 0.08815 170.4)",
+          "oklch(49.29% 0.08815 170.4)",
+          "oklch(60.71% 0.08815 170.4)",
+          "oklch(72.14% 0.08815 170.4)",
+          "oklch(83.57% 0.08815 170.4)",
+          "oklch(95.0% 0.08815 170.4)"
+        ]
+      },
+      "light-danger": {
+        "role": "secondary",
+        "displayName": "浅色主题风险色",
+        "tonalRamp": [
+          "oklch(15.0% 0.16463 18.6)",
+          "oklch(26.43% 0.16463 18.6)",
+          "oklch(37.86% 0.16463 18.6)",
+          "oklch(49.29% 0.16463 18.6)",
+          "oklch(60.71% 0.16463 18.6)",
+          "oklch(72.14% 0.16463 18.6)",
+          "oklch(83.57% 0.16463 18.6)",
+          "oklch(95.0% 0.16463 18.6)"
+        ]
+      },
+      "light-positive": {
+        "role": "primary",
+        "displayName": "浅色主题收益色",
+        "tonalRamp": [
+          "oklch(15.0% 0.08815 170.4)",
+          "oklch(26.43% 0.08815 170.4)",
+          "oklch(37.86% 0.08815 170.4)",
+          "oklch(49.29% 0.08815 170.4)",
+          "oklch(60.71% 0.08815 170.4)",
+          "oklch(72.14% 0.08815 170.4)",
+          "oklch(83.57% 0.08815 170.4)",
+          "oklch(95.0% 0.08815 170.4)"
+        ]
+      },
+      "light-input": {
+        "role": "neutral",
+        "displayName": "浅色主题输入底色",
+        "tonalRamp": [
+          "oklch(15.0% 0.00251 228.78)",
+          "oklch(26.43% 0.00251 228.78)",
+          "oklch(37.86% 0.00251 228.78)",
+          "oklch(49.29% 0.00251 228.78)",
+          "oklch(60.71% 0.00251 228.78)",
+          "oklch(72.14% 0.00251 228.78)",
+          "oklch(83.57% 0.00251 228.78)",
+          "oklch(95.0% 0.00251 228.78)"
+        ]
+      },
+      "chart-2": {
+        "role": "secondary",
+        "displayName": "深色主题图表序列 2",
+        "tonalRamp": [
+          "oklch(15.0% 0.09917 253.36)",
+          "oklch(26.43% 0.09917 253.36)",
+          "oklch(37.86% 0.09917 253.36)",
+          "oklch(49.29% 0.09917 253.36)",
+          "oklch(60.71% 0.09917 253.36)",
+          "oklch(72.14% 0.09917 253.36)",
+          "oklch(83.57% 0.09917 253.36)",
+          "oklch(95.0% 0.09917 253.36)"
+        ]
+      },
+      "chart-3": {
+        "role": "secondary",
+        "displayName": "深色主题图表序列 3",
+        "tonalRamp": [
+          "oklch(15.0% 0.08707 82.9)",
+          "oklch(26.43% 0.08707 82.9)",
+          "oklch(37.86% 0.08707 82.9)",
+          "oklch(49.29% 0.08707 82.9)",
+          "oklch(60.71% 0.08707 82.9)",
+          "oklch(72.14% 0.08707 82.9)",
+          "oklch(83.57% 0.08707 82.9)",
+          "oklch(95.0% 0.08707 82.9)"
+        ]
+      },
+      "chart-4": {
+        "role": "secondary",
+        "displayName": "深色主题图表序列 4",
+        "tonalRamp": [
+          "oklch(15.0% 0.09584 299.5)",
+          "oklch(26.43% 0.09584 299.5)",
+          "oklch(37.86% 0.09584 299.5)",
+          "oklch(49.29% 0.09584 299.5)",
+          "oklch(60.71% 0.09584 299.5)",
+          "oklch(72.14% 0.09584 299.5)",
+          "oklch(83.57% 0.09584 299.5)",
+          "oklch(95.0% 0.09584 299.5)"
+        ]
+      },
+      "chart-5": {
+        "role": "secondary",
+        "displayName": "深色主题图表序列 5",
+        "tonalRamp": [
+          "oklch(15.0% 0.11656 13.62)",
+          "oklch(26.43% 0.11656 13.62)",
+          "oklch(37.86% 0.11656 13.62)",
+          "oklch(49.29% 0.11656 13.62)",
+          "oklch(60.71% 0.11656 13.62)",
+          "oklch(72.14% 0.11656 13.62)",
+          "oklch(83.57% 0.11656 13.62)",
+          "oklch(95.0% 0.11656 13.62)"
+        ]
+      },
+      "light-chart-1": {
+        "role": "secondary",
+        "displayName": "浅色主题图表序列 1",
+        "tonalRamp": [
+          "oklch(15.0% 0.09876 167.76)",
+          "oklch(26.43% 0.09876 167.76)",
+          "oklch(37.86% 0.09876 167.76)",
+          "oklch(49.29% 0.09876 167.76)",
+          "oklch(60.71% 0.09876 167.76)",
+          "oklch(72.14% 0.09876 167.76)",
+          "oklch(83.57% 0.09876 167.76)",
+          "oklch(95.0% 0.09876 167.76)"
+        ]
+      },
+      "light-chart-2": {
+        "role": "secondary",
+        "displayName": "浅色主题图表序列 2",
+        "tonalRamp": [
+          "oklch(15.0% 0.09683 248.11)",
+          "oklch(26.43% 0.09683 248.11)",
+          "oklch(37.86% 0.09683 248.11)",
+          "oklch(49.29% 0.09683 248.11)",
+          "oklch(60.71% 0.09683 248.11)",
+          "oklch(72.14% 0.09683 248.11)",
+          "oklch(83.57% 0.09683 248.11)",
+          "oklch(95.0% 0.09683 248.11)"
+        ]
+      },
+      "light-chart-3": {
+        "role": "secondary",
+        "displayName": "浅色主题图表序列 3",
+        "tonalRamp": [
+          "oklch(15.0% 0.09009 84.55)",
+          "oklch(26.43% 0.09009 84.55)",
+          "oklch(37.86% 0.09009 84.55)",
+          "oklch(49.29% 0.09009 84.55)",
+          "oklch(60.71% 0.09009 84.55)",
+          "oklch(72.14% 0.09009 84.55)",
+          "oklch(83.57% 0.09009 84.55)",
+          "oklch(95.0% 0.09009 84.55)"
+        ]
+      },
+      "light-chart-4": {
+        "role": "secondary",
+        "displayName": "浅色主题图表序列 4",
+        "tonalRamp": [
+          "oklch(15.0% 0.13433 299.28)",
+          "oklch(26.43% 0.13433 299.28)",
+          "oklch(37.86% 0.13433 299.28)",
+          "oklch(49.29% 0.13433 299.28)",
+          "oklch(60.71% 0.13433 299.28)",
+          "oklch(72.14% 0.13433 299.28)",
+          "oklch(83.57% 0.13433 299.28)",
+          "oklch(95.0% 0.13433 299.28)"
+        ]
+      },
+      "light-chart-5": {
+        "role": "secondary",
+        "displayName": "浅色主题图表序列 5",
+        "tonalRamp": [
+          "oklch(15.0% 0.13969 12.73)",
+          "oklch(26.43% 0.13969 12.73)",
+          "oklch(37.86% 0.13969 12.73)",
+          "oklch(49.29% 0.13969 12.73)",
+          "oklch(60.71% 0.13969 12.73)",
+          "oklch(72.14% 0.13969 12.73)",
+          "oklch(83.57% 0.13969 12.73)",
+          "oklch(95.0% 0.13969 12.73)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "display",
+        "purpose": "总资产等关键数值；非营销标题。"
+      },
+      "headline": {
+        "displayName": "headline",
+        "purpose": "页面标题。"
+      },
+      "title": {
+        "displayName": "title",
+        "purpose": "面板标题。"
+      },
+      "body": {
+        "displayName": "body",
+        "purpose": "中文正文。"
+      },
+      "label": {
+        "displayName": "label",
+        "purpose": "导航、表单标签与明细。"
+      },
+      "button": {
+        "displayName": "button",
+        "purpose": "业务操作。"
+      },
+      "table-header": {
+        "displayName": "table-header",
+        "purpose": "金融表头。"
+      },
+      "nav-group": {
+        "displayName": "nav-group",
+        "purpose": "侧栏分组。"
+      },
+      "numeric": {
+        "displayName": "numeric",
+        "purpose": "数量及关键金额的等宽数字。"
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "button-background",
+        "value": "background 0.15s ease-out",
+        "purpose": "既有按钮背景反馈；减少动态效果偏好下关闭。"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact",
+        "value": "1100px"
+      },
+      {
+        "name": "mobile",
+        "value": "720px"
+      }
+    ],
+    "focus": [
+      {
+        "name": "global-focus",
+        "value": "2px solid var(--accent)",
+        "offset": "4px",
+        "purpose": "交互元素统一键盘焦点。"
+      },
+      {
+        "name": "table-focus",
+        "value": "2px solid var(--accent)",
+        "offset": "2px",
+        "purpose": "横向滚动数据区域。"
+      }
+    ],
+    "tonalRampProvenance": "为面板色带预览以 OKLCH 合成八阶亮度；保持源色相与色度。不是新增生产 token，不应替换 globals.css。",
+    "evidence": {
+      "mode": "code-first",
+      "authority": "用户已确认的专业金融终端与实施授权；本次从实现刷新既有设计记录。",
+      "code": [
+        "app/globals.css",
+        "components/shell.tsx",
+        "components/ui/button.tsx",
+        "components/wealth-view.tsx",
+        "components/table.tsx",
+        "components/charts.tsx",
+        "components/form.tsx",
+        "lib/utils.ts"
+      ],
+      "visual": [
+        {
+          "path": ".impeccable/review/desktop.png",
+          "surface": "财富主页",
+          "theme": "dark",
+          "dimensions": "1433x2754"
+        },
+        {
+          "path": ".impeccable/review/mobile.png",
+          "surface": "财富主页",
+          "theme": "dark",
+          "dimensions": "390x3745"
+        },
+        {
+          "path": ".impeccable/review/light.png",
+          "surface": "财富主页",
+          "theme": "light",
+          "dimensions": "1433x2754"
+        }
+      ],
+      "scope": "仅财富主页三个视口；非全应用视觉认证。"
+    }
+  },
+  "components": [
+    {
+      "name": "保存按钮",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "既有primary变体；禁用、悬停与键盘焦点使用当前主题。",
+      "html": "<button class=\"ds-btn-primary\">保存</button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid transparent;border-radius:6px;padding:8px 13px;cursor:pointer;font-size:12px;font-weight:500;transition:background 0.15s ease-out;font-family: \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif; line-height: 1.6;background:var(--accent, #64d4b1);color:var(--bg, #101419);}.ds-btn-primary:hover{filter:brightness(1.12)}.ds-btn-primary:disabled{opacity:.45;cursor:not-allowed}.ds-btn-primary:focus-visible{outline: 2px solid var(--accent, #64d4b1); outline-offset: 4px;}@media(prefers-reduced-motion:reduce){.ds-btn-primary{transition:none}}"
+    },
+    {
+      "name": "录入期初余额按钮",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "既有outline变体；禁用、悬停与键盘焦点使用当前主题。",
+      "html": "<button class=\"ds-btn-outline\">录入期初余额</button>",
+      "css": ".ds-btn-outline{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid transparent;border-radius:6px;padding:8px 13px;cursor:pointer;font-size:12px;font-weight:500;transition:background 0.15s ease-out;font-family: \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif; line-height: 1.6;background:transparent;border-color:var(--line, #2b3541);color:var(--text, #e9eef4);}.ds-btn-outline:hover{filter:brightness(1.12)}.ds-btn-outline:disabled{opacity:.45;cursor:not-allowed}.ds-btn-outline:focus-visible{outline: 2px solid var(--accent, #64d4b1); outline-offset: 4px;}@media(prefers-reduced-motion:reduce){.ds-btn-outline{transition:none}}"
+    },
+    {
+      "name": "清除筛选按钮",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "既有ghost变体；禁用、悬停与键盘焦点使用当前主题。",
+      "html": "<button class=\"ds-btn-ghost\">清除筛选</button>",
+      "css": ".ds-btn-ghost{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid transparent;border-radius:6px;padding:8px 13px;cursor:pointer;font-size:12px;font-weight:500;transition:background 0.15s ease-out;font-family: \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif; line-height: 1.6;background:transparent;color:var(--muted, #a1aebe);padding:7px;}.ds-btn-ghost:hover{filter:brightness(1.12)}.ds-btn-ghost:disabled{opacity:.45;cursor:not-allowed}.ds-btn-ghost:focus-visible{outline: 2px solid var(--accent, #64d4b1); outline-offset: 4px;}@media(prefers-reduced-motion:reduce){.ds-btn-ghost{transition:none}}"
+    },
+    {
+      "name": "业务字段",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "字段标签、主题底色与统一键盘焦点；输入最小高度38px。",
+      "html": "<label class=\"ds-field\">余额<input class=\"ds-input\" placeholder=\"例如 10000.00\"></label>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted, #a1aebe);font-family: \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif; line-height: 1.6;}.ds-input{background:var(--input, #11171e);color:var(--text, #e9eef4);border:1px solid var(--line, #2b3541);border-radius:5px;padding:9px 10px;min-height:38px;font:inherit;caret-color:var(--accent, #64d4b1);}.ds-input:focus-visible{outline: 2px solid var(--accent, #64d4b1); outline-offset: 4px;}"
+    },
+    {
+      "name": "当前导航",
+      "kind": "nav",
+      "refersTo": "navigation-active",
+      "description": "分组侧栏的当前项；示例保留真实17px图标尺寸。",
+      "html": "<nav aria-label=\"财富导航\"><a class=\"ds-nav\" href=\"#wealth\" aria-current=\"page\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M20 8V5a2 2 0 0 0-2-2H6a3 3 0 0 0 0 6h14v11H6a3 3 0 0 1-3-3V6\"/><path d=\"M20 12h-4v4h4\"/></svg>总资产</a></nav>",
+      "css": ".ds-nav{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:6px;margin:2px 0;font-size:12px;text-decoration:none;color:var(--accent, #64d4b1);background:var(--raised, #1d252e);font-family: \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif; line-height: 1.6;}.ds-nav:hover{color:var(--text, #e9eef4)}.ds-nav:focus-visible{outline: 2px solid var(--accent, #64d4b1); outline-offset: 4px;}"
+    },
+    {
+      "name": "估值状态",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "中性状态徽标，用明确文字表达有效、过期或缺失。",
+      "html": "<span class=\"ds-badge\">有效</span>",
+      "css": ".ds-badge{display:inline-block;background:var(--raised, #1d252e);color:var(--text, #e9eef4);border:1px solid var(--line, #2b3541);border-radius:4px;padding:3px 7px;font-size:10px;font-family: \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif; line-height: 1.6;}"
+    },
+    {
+      "name": "业务面板",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "无阴影的分组表面，手机内边距收紧。",
+      "html": "<section class=\"ds-panel\"><h2 class=\"ds-panel-title\">账户资产</h2><p class=\"ds-panel-detail\">市值、盈亏及估值状态保留在同一组信息中。</p></section>",
+      "css": ".ds-panel{background:var(--panel, #171d24);color:var(--text, #e9eef4);border:1px solid var(--line, #2b3541);border-radius:12px;padding:22px;min-width:0;font-family: \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif; line-height: 1.6;}.ds-panel-title{font-size:16px;font-weight:600;margin:0 0 14px}.ds-panel-detail{font-size:12px;color:var(--muted, #a1aebe);margin:0}@media(max-width:720px){.ds-panel{padding:16px}}"
+    },
+    {
+      "name": "可追踪指标",
+      "kind": "custom",
+      "refersTo": "metric",
+      "description": "共享容器里的数值单元；不虚构应用级示例数据。",
+      "html": "<div class=\"ds-metric\"><div class=\"ds-metric-label\">总资产</div><div class=\"ds-metric-value\"><a class=\"ds-metric-link\" href=\"#assets\">CNY 727,450.18<span class=\"ds-metric-hint\">查看明细</span></a></div><div class=\"ds-metric-note\">示例金额 · 全部有效估值</div></div>",
+      "css": ".ds-metric{padding:22px;background:var(--panel, #171d24);color:var(--text, #e9eef4);border-right:1px solid var(--line, #2b3541);font-family: \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif; line-height: 1.6;}.ds-metric-label{font-size:12px;color:var(--muted, #a1aebe);margin-bottom:8px}.ds-metric-value{font-size:25px;line-height:1.3;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;overflow-wrap:anywhere}.ds-metric-link{color:inherit;text-decoration:none}.ds-metric-link:hover{color:var(--accent, #64d4b1)}.ds-metric-link:focus-visible{outline: 2px solid var(--accent, #64d4b1); outline-offset: 4px;}.ds-metric-hint{display:block;font-size:10px;font-weight:400;color:var(--muted, #a1aebe);margin-top:5px;letter-spacing:0}.ds-metric-note{font-size:11px;color:var(--muted, #a1aebe);margin-top:8px}@media(max-width:720px){.ds-metric{padding:16px}.ds-metric-value{font-size:21px}}"
+    },
+    {
+      "name": "金融明细表",
+      "kind": "custom",
+      "refersTo": "data-table",
+      "description": "完整字段与可聚焦横向滚动区；盈亏示例采用正收益语义。",
+      "html": "<div class=\"ds-table-scroll\" role=\"region\" aria-label=\"可横向滚动的数据表\" tabindex=\"0\"><table class=\"ds-table\"><thead><tr><th>资产</th><th>市值</th><th>未实现盈亏</th><th>估值状态</th></tr></thead><tbody><tr><td>ETF（示例）</td><td class=\"ds-table-number\">CNY 39,398.29</td><td class=\"ds-table-positive\">CNY 3,398.29</td><td>有效</td></tr></tbody></table></div>",
+      "css": ".ds-table-scroll{overflow:auto;width:100%;background:var(--panel, #171d24);color:var(--text, #e9eef4);font-family: \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif; line-height: 1.6;}.ds-table-scroll:focus-visible{outline:2px solid var(--accent, #64d4b1);outline-offset:2px}.ds-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}.ds-table th{text-align:left;color:var(--muted, #a1aebe);font-weight:500;font-size:11px;padding:11px 12px;background:var(--raised, #1d252e)}.ds-table td{padding:13px 12px;border-bottom:1px solid var(--line, #2b3541)}.ds-table tr:last-child td{border:0}.ds-table tbody tr:hover{background:var(--raised, #1d252e)}.ds-table-number{font-family:ui-monospace, SFMono-Regular, monospace;font-variant-numeric:tabular-nums}.ds-table-positive{color:var(--positive, #64d4b1)}"
+    },
+    {
+      "name": "金融空状态",
+      "kind": "custom",
+      "refersTo": "empty-state",
+      "description": "明确数据不足与下一步，避免展示伪造图表。",
+      "html": "<div class=\"ds-empty\"><strong class=\"ds-empty-title\">暂无足够数据</strong>保存估值或录入记录后显示。</div>",
+      "css": ".ds-empty{text-align:center;padding:50px 20px;color:var(--muted, #a1aebe);background:var(--panel, #171d24);font-size:14px;font-family: \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif; line-height: 1.6;}.ds-empty-title{display:block;color:var(--text, #e9eef4);margin-bottom:7px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "专业金融终端",
+    "overview": "TradeOS 的视觉方向沿用用户已确认的专业金融终端：中文操作、本地单用户、默认深色并可切浅色、高信息密度，优先业务准确性，不过度美化。界面以总资产与风险、资产明细、资金流水和交易记录组织工作，依靠标题、分隔线、表格与有限的强调色表达层次。\n\n系统采用可离线的中文系统字体、等宽数字、平整面板与清晰键盘焦点。主题更换只改变可读性与表面色，不改变金融语义；模拟回测与真实账本的隔离须在相关页面明确表达。本文记录已实现的设计系统；视觉证据仅覆盖财富主页的桌面深色、手机深色和桌面浅色三个视口，不能据此声称全应用完成视觉认证。",
+    "keyCharacteristics": [
+      "中文系统字体，金额保留币种，数值对齐稳定。",
+      "深浅两套语义色，正收益、负收益、零值与缺失值明确区分。",
+      "紧凑导航、指标分格、图表与明细表，信息优先。",
+      "响应式重排与表格横向滚动，保留完整金融字段。"
+    ],
+    "rules": [
+      {
+        "name": "The Financial Meaning Rule",
+        "body": "正数使用收益色，负数使用风险色，零值和缺失值保持中性色；缺失金额显示“数据不足”，不得伪装成零。",
+        "section": "colors"
+      },
+      {
+        "name": "The Numeric Alignment Rule",
+        "body": "指标使用 tabular-nums；明细中的数量与关键金额使用等宽数字样式，金额保留计价币种。",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Surface Rule",
+        "body": "以背景、面板、抬升层和边框区分结构，不增加装饰阴影、纹理或大面积渐变。",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do 沿用中文系统字体、既有数值层级与完整币种标记。",
+      "Do 为可点击汇总保留“查看明细”，从资产进入流水时保留账户与资产筛选上下文。",
+      "Do 将估值缺失、过期、数据不足与业务空状态写成可理解的文字；同时保留开始操作的入口。",
+      "Do 保留浅色主题、清晰键盘焦点、减少动态效果设置与手机表格横滑提示。",
+      "Do 在模拟回测页面明确显示与真实账本隔离的说明。"
+    ],
+    "donts": [
+      "Don't 用装饰性图像、大面积渐变或悬浮阴影挤占业务信息。",
+      "Don't 将零盈亏染成正收益或负收益，也不要把缺失金额显示为零。",
+      "Don't 为适配手机隐藏关键金额、币种、估值状态或来源时间；使用可聚焦横向滚动区。",
+      "Don't 将当前显示的关联成交标识描述为已经实现的成交跳转链接。",
+      "Don't 把财富主页三个截图的核对结果扩大为全应用视觉认证。"
+    ]
+  }
+}

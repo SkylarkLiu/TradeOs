@@ -1,0 +1,10 @@
+services:
+  tradeos:
+    build: .
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - tradeos-data:/app/data
+    restart: unless-stopped
+volumes:
+  tradeos-data:
