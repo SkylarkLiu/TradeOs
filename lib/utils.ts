@@ -33,3 +33,9 @@ export function signedClass(value: string | null | undefined) {
         ? "negative"
         : "";
 }
+
+export function compareValues(x: string | number, y: string | number) {
+  const decimal = /^-?\d+(?:\.\d+)?$/;
+  if (decimal.test(String(x)) && decimal.test(String(y))) return D(x).cmp(y);
+  return String(x).localeCompare(String(y), "zh-CN", { numeric: true });
+}

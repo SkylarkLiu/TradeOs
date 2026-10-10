@@ -1,5 +1,36 @@
 import { D, sum, canonical } from "@/lib/calculations/decimal";
 import type { Tx } from "./wealth";
+export async function historicalLiabilities(tx: Tx, at: Date) {
+  const liabilities = await tx.liability.findMany();
+  if (liabilities.every((l) => l.at <= at))
+    return { rows: liabilities, complete: true };
+  const audits = await tx.auditLog.findMany({
+    where: { action: { in: ["liability.create", "liability.update"] } },
+    orderBy: { at: "desc" },
+  });
+  let complete = true;
+  const rows = liabilities.flatMap((l) => {
+    if (l.at <= at) return [l];
+    const history = audits.filter((a) => a.entityId === l.id);
+    const previous = history.find((a) => a.at <= at);
+    if (previous)
+      return [
+        {
+          ...l,
+          amount: JSON.parse(previous.detail).amount as string,
+          at: previous.at,
+        },
+      ];
+    // Before recorded creation there was no liability; an unaudited prior balance is unknown.
+    if (
+      !history.some((a) => a.action === "liability.create") &&
+      history.some((a) => a.action === "liability.update")
+    )
+      complete = false;
+    return [];
+  });
+  return { rows, complete };
+}
 export async function historicalBalances(tx: Tx, at: Date) {
   const balances = await tx.assetBalance.findMany({
       include: { asset: true, account: { include: { platform: true } } },

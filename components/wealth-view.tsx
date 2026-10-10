@@ -556,6 +556,19 @@ export function WealthView({
             label="保存当前快照"
           />
         </Heading>
+        <Form
+          title="保存指定时间快照"
+          action="snapshot.create"
+          onDone={refresh}
+          transform={(d) => ({ ...d, currency: report })}
+          submit="保存历史快照"
+          fields={[
+            {
+              ...atField,
+              help: "按该时点账本、报价和负债记录重建；零点快照可用于今日、月初及年初指标。",
+            },
+          ]}
+        />
         <section className="panel">
           <h2>资产与净资产</h2>
           <Chart
@@ -851,11 +864,13 @@ export function BalanceTable() {
           key: "qty",
           label: "数量",
           value: (r) => <span className="mono">{r.quantity}</span>,
+          sort: (r) => r.quantity,
         },
         {
           key: "cost",
           label: "总成本",
           value: (r) => amount(r.cost, r.currency),
+          sort: (r) => r.cost,
         },
         {
           key: "price",
@@ -866,10 +881,12 @@ export function BalanceTable() {
           key: "value",
           label: "市值",
           value: (r) => <span className="mono">{amount(r.value, report)}</span>,
+          sort: (r) => r.value ?? "",
         },
         {
           key: "pnl",
           label: "未实现盈亏",
+          sort: (r) => r.unrealized ?? "",
           value: (r) => (
             <span className={signedClass(r.unrealized)}>
               {amount(r.unrealized, report)}

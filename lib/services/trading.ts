@@ -148,6 +148,10 @@ export async function tradingCommand(action: string, raw: unknown) {
     case "plan.create": {
       const input = planSchema.parse(raw);
       return db.$transaction(async (tx) => {
+        const account = await tx.account.findUniqueOrThrow({
+          where: { id: input.accountId },
+        });
+        if (account.archived) throw new Error("账户已归档");
         const a = await tx.asset.findUniqueOrThrow({
           where: { id: input.assetId },
         });
@@ -175,6 +179,7 @@ export async function tradingCommand(action: string, raw: unknown) {
     }
     case "trade.create": {
       let input = tradeSchema.parse(raw);
+      if (input.openedAt > new Date()) throw new Error("交易不能使用未来时间");
       return db.$transaction(async (tx) => {
         const account = await tx.account.findUniqueOrThrow({
           where: { id: input.accountId },
@@ -236,11 +241,21 @@ export async function tradingCommand(action: string, raw: unknown) {
         })
         .parse(raw);
       return db.$transaction(async (tx) => {
+        if (input.at > new Date()) throw new Error("持仓事件不能使用未来时间");
         const t = await tx.trade.findUniqueOrThrow({
           where: { id: input.tradeId },
+          include: {
+            events: { orderBy: { at: "desc" }, take: 1 },
+            fills: { orderBy: [{ at: "desc" }, { sequence: "desc" }], take: 1 },
+          },
         });
         if (t.status !== "OPEN") throw new Error("交易已平仓");
         if (input.at < t.openedAt) throw new Error("事件不能早于开仓");
+        if (
+          (t.events[0] && input.at < t.events[0].at) ||
+          (t.fills[0] && input.at < t.fills[0].at)
+        )
+          throw new Error("持仓事件不能早于上一次事件或成交");
         if (["STOP_ADJUSTMENT", "TARGET_ADJUSTMENT"].includes(input.type)) {
           if (!input.value) throw new Error("请输入新价格");
           await tx.trade.update({
@@ -327,6 +342,7 @@ export async function recordFill(raw: unknown) {
       include: {
         asset: true,
         fills: { orderBy: [{ at: "desc" }, { sequence: "desc" }], take: 1 },
+        events: { orderBy: { at: "desc" }, take: 1 },
       },
     });
     if (trade.status !== "OPEN") throw new Error("已平仓交易不可追加成交");
@@ -335,6 +351,8 @@ export async function recordFill(raw: unknown) {
       (trade.fills[0] && input.at < trade.fills[0].at)
     )
       throw new Error("成交时间不能早于开仓或上一笔成交");
+    if (trade.events[0] && input.at < trade.events[0].at)
+      throw new Error("成交时间不能早于上一次持仓事件");
     const oldQ = D(trade.quantity),
       q = D(input.quantity),
       price = D(input.price),

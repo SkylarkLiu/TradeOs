@@ -18,12 +18,22 @@ export const nowLocal = () => {
     .slice(0, 16);
 };
 export async function mutate(action: string, input: unknown) {
-  const r = await fetch("/api/command", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, input }),
-  });
-  const result = await r.json();
+  let r: Response;
+  try {
+    r = await fetch("/api/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, input }),
+    });
+  } catch {
+    throw new Error("无法连接本地服务。请先检查记录是否已保存，再尝试操作。");
+  }
+  let result;
+  try {
+    result = await r.json();
+  } catch {
+    throw new Error("服务未返回有效结果。请检查记录状态后再重试。");
+  }
   if (!r.ok) throw new Error(result.error);
   return result.result;
 }
@@ -83,6 +93,7 @@ export function Form({
             }
             await mutate(action, transform ? transform(data) : data);
             el.reset();
+            setValues({});
             onDone();
           } catch (e) {
             setError(e instanceof Error ? e.message : "保存失败");

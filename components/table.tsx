@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "./ui/button";
+import { compareValues } from "@/lib/utils";
 export type Column<T> = {
   key: string;
   label: string;
@@ -45,10 +46,7 @@ export function Table<T>({
       filtered = [...filtered].sort((a, b) => {
         const x = col.sort!(a),
           y = col.sort!(b);
-        const result =
-          typeof x === "number" && typeof y === "number"
-            ? x - y
-            : String(x).localeCompare(String(y), "zh-CN", { numeric: true });
+        const result = compareValues(x, y);
         return sort.desc ? -result : result;
       });
   }

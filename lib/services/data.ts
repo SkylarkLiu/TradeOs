@@ -4,7 +4,7 @@ import { mkdir, writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import Database from "better-sqlite3";
 import models from "@/lib/schema-metadata.json";
-import { db } from "@/lib/repositories/db";
+import { db, databaseFile } from "@/lib/repositories/db";
 import { D, canonical, contractPnl } from "@/lib/calculations/decimal";
 import {
   id,
@@ -16,6 +16,7 @@ import {
 } from "@/lib/validation/common";
 import { scoreRulesSchema } from "./analytics";
 import { candleSchema } from "./backtest";
+import { historicalContracts } from "./history";
 import { audit, portfolio, type Tx } from "./wealth";
 // FK dependency order is shared by backup and restore. Relations are not serialized as nested objects.
 export const tables = [
@@ -238,7 +239,7 @@ export async function dataCommand(action: string, raw: unknown) {
     return db.$transaction(
       async (tx) => {
         const previous = await backupFrom(tx),
-          root = path.resolve("data/backups");
+          root = path.join(path.dirname(databaseFile), "backups");
         await mkdir(root, { recursive: true });
         const file = path.join(
           root,
@@ -276,19 +277,20 @@ export async function dataCommand(action: string, raw: unknown) {
         rows = p.rows.filter((r) => r.accountId === input.accountId);
       const value = rows.reduce((s, r) => s.plus(r.value ?? 0), D(0));
       let complete = rows.every((r) => r.status === "VALID");
-      const contracts = await tx.trade.findMany({
-        where: {
-          accountId: input.accountId,
-          status: "OPEN",
-          asset: { instrument: { not: "SPOT" } },
-        },
-        include: { asset: true },
-      });
-      if (contracts.some((t) => D(t.quantity).gt(0))) {
+      const contracts = await historicalContracts(tx, input.at);
+      if (
+        contracts.some(
+          (t) => t.accountId === input.accountId && D(t.quantity).gt(0),
+        )
+      ) {
         complete = false;
       }
       const inTransit = await tx.transfer.count({
-        where: { fromId: input.accountId, status: "IN_TRANSIT" },
+        where: {
+          fromId: input.accountId,
+          at: { lte: input.at },
+          OR: [{ completedAt: null }, { completedAt: { gt: input.at } }],
+        },
       });
       if (inTransit) complete = false;
       const actual = D(input.value);
@@ -408,13 +410,8 @@ export async function ledgerCheck(tx: Tx) {
   });
 }
 export async function databaseBackup() {
-  const filename = path.resolve(
-      (process.env.DATABASE_URL ?? "file:./data/tradeos.db").replace(
-        /^file:/,
-        "",
-      ),
-    ),
-    folder = path.resolve("data/backups");
+  const filename = databaseFile,
+    folder = path.join(path.dirname(databaseFile), "backups");
   await mkdir(folder, { recursive: true });
   const file = path.join(
       folder,
@@ -519,6 +516,23 @@ async function validateFinancialLinks(tx: Tx) {
         : t.closedAt !== null)
     )
       throw new Error("交易汇总与成交不一致");
+  }
+  const openSpot = trades.filter(
+    (t) => t.status === "OPEN" && t.asset.instrument === "SPOT",
+  );
+  const balances = await tx.assetBalance.findMany();
+  for (const t of openSpot) {
+    const reserved = openSpot
+      .filter(
+        (other) =>
+          other.accountId === t.accountId && other.assetId === t.assetId,
+      )
+      .reduce((total, other) => total.plus(other.quantity), D(0));
+    const balance = balances.find(
+      (b) => b.accountId === t.accountId && b.assetId === t.assetId,
+    );
+    if (reserved.gt(balance?.quantity ?? "0"))
+      throw new Error("未平仓交易数量超过账户资产余额");
   }
   const simulated = await tx.backtestTrade.findMany({
     include: { session: { include: { asset: true } } },

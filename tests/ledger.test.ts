@@ -906,3 +906,517 @@ it("房地产默认排除FIRE，配置纳入后只改变投资净资产", async 
   );
   expect(included.assets).toBe(excluded.assets);
 });
+
+import { safeCsv, parseImport } from "@/lib/services/imports";
+describe("深入使用验收回归", () => {
+  it("CSV中的负数调整可重新预览，文本公式仍被转义", async () => {
+    const { a, cash } = await setup();
+    const csv = safeCsv([
+      {
+        accountId: a.id,
+        assetId: cash.id,
+        type: "ADJUSTMENT",
+        quantity: "-20.01",
+        fee: "0",
+        at: "2025-01-01T00:00:00Z",
+        note: "=1+1",
+      },
+    ]);
+    const mapping = Object.fromEntries(
+      ["accountId", "assetId", "type", "quantity", "fee", "at", "note"].map(
+        (key) => [key, key],
+      ),
+    );
+    const parsed = parseImport({ csv, mapping });
+    expect(parsed.rows[0].error).toBeNull();
+    expect(parsed.rows[0].data?.quantity).toBe("-20.01");
+    expect(parsed.rows[0].data?.note).toBe("'=1+1");
+    const blank = parseImport({
+      csv: safeCsv([
+        {
+          accountId: a.id,
+          assetId: cash.id,
+          type: "DEPOSIT",
+          quantity: "100",
+          price: "",
+          fee: "",
+          externalId: "",
+          at: "2025-01-01T00:00:00Z",
+        },
+      ]),
+      mapping: { ...mapping, price: "price", externalId: "externalId" },
+    });
+    expect(blank.rows[0].error).toBeNull();
+    expect(blank.rows[0].data?.fee).toBe("0");
+    expect(blank.rows[0].externalId).toMatch(/^csv:/);
+  });
+  it("未来合约成交拒绝，交易和账本保持不变", async () => {
+    const { a, cash } = await setup();
+    const asset = await db.asset.create({
+      data: {
+        code: unique(),
+        name: "时间合约",
+        assetClass: "OTHER",
+        currency: "CNY",
+        instrument: "LINEAR",
+      },
+    });
+    await recordTransaction({
+      accountId: a.id,
+      assetId: cash.id,
+      type: "DEPOSIT",
+      quantity: "1000",
+      at: at(),
+    });
+    const trade = await tradingCommand("trade.create", {
+      accountId: a.id,
+      assetId: asset.id,
+      direction: "LONG",
+      openedAt: at(1),
+    });
+    await expect(
+      recordFill({
+        tradeId: trade.id,
+        action: "ENTRY",
+        quantity: "1",
+        price: "100",
+        at: new Date(Date.now() + 86400000).toISOString(),
+      }),
+    ).rejects.toThrow("未来");
+    expect(
+      (await db.trade.findUniqueOrThrow({ where: { id: trade.id } })).quantity,
+    ).toBe("0");
+    expect(
+      await db.assetTransaction.count({ where: { accountId: a.id } }),
+    ).toBe(1);
+  });
+  it("未来转出和到账拒绝，状态和余额保持不变", async () => {
+    const { a, b, cash } = await setup();
+    await recordTransaction({
+      accountId: a.id,
+      assetId: cash.id,
+      type: "DEPOSIT",
+      quantity: "1000",
+      at: at(),
+    });
+    const input = {
+      fromId: a.id,
+      toId: b.id,
+      assetId: cash.id,
+      quantity: "100",
+    };
+    await expect(
+      wealthCommand("transfer.create", {
+        ...input,
+        at: new Date(Date.now() + 86400000).toISOString(),
+      }),
+    ).rejects.toThrow("未来");
+    const transfer = await wealthCommand("transfer.create", {
+      ...input,
+      at: at(1),
+    });
+    await expect(
+      wealthCommand("transfer.complete", {
+        id: transfer.id,
+        at: new Date(Date.now() + 86400000).toISOString(),
+      }),
+    ).rejects.toThrow("未来");
+    expect(
+      (await db.transfer.findUniqueOrThrow({ where: { id: transfer.id } }))
+        .status,
+    ).toBe("IN_TRANSIT");
+    expect(await db.assetBalance.count({ where: { accountId: b.id } })).toBe(0);
+  });
+  it("账户归档后不能新增计划或合约成交", async () => {
+    const { a, cash } = await setup();
+    const asset = await db.asset.create({
+      data: {
+        code: unique(),
+        name: "归档合约",
+        assetClass: "OTHER",
+        currency: "CNY",
+        instrument: "LINEAR",
+      },
+    });
+    await recordTransaction({
+      accountId: a.id,
+      assetId: cash.id,
+      type: "DEPOSIT",
+      quantity: "1000",
+      at: at(),
+    });
+    const trade = await tradingCommand("trade.create", {
+      accountId: a.id,
+      assetId: asset.id,
+      direction: "LONG",
+      openedAt: at(1),
+    });
+    await wealthCommand("account.archive", { id: a.id, archived: true });
+    await expect(
+      recordFill({
+        tradeId: trade.id,
+        action: "ENTRY",
+        quantity: "1",
+        price: "100",
+        at: at(2),
+      }),
+    ).rejects.toThrow("归档");
+    await expect(
+      tradingCommand("plan.create", {
+        accountId: a.id,
+        assetId: asset.id,
+        direction: "LONG",
+        entry: "100",
+        stop: "90",
+        target: "120",
+        equity: "1000",
+        riskPercent: "1",
+        reason: "测试入场",
+        invalidation: "测试失效",
+      }),
+    ).rejects.toThrow("归档");
+  });
+  it("未平仓现货保留持仓，普通流水与转账只能动用剩余数量", async () => {
+    const { a, b, cash } = await setup();
+    const asset = await db.asset.create({
+      data: {
+        code: unique(),
+        name: "保留持仓",
+        assetClass: "STOCK",
+        currency: "CNY",
+      },
+    });
+    await recordTransaction({
+      accountId: a.id,
+      assetId: cash.id,
+      type: "DEPOSIT",
+      quantity: "1000",
+      at: at(),
+    });
+    await recordTransaction({
+      accountId: a.id,
+      assetId: asset.id,
+      type: "DEPOSIT",
+      quantity: "2",
+      price: "100",
+      at: at(1),
+    });
+    const t = await tradingCommand("trade.create", {
+      accountId: a.id,
+      assetId: asset.id,
+      direction: "LONG",
+      openedAt: at(2),
+    });
+    await recordFill({
+      tradeId: t.id,
+      action: "ENTRY",
+      quantity: "5",
+      price: "100",
+      at: at(3),
+    });
+    await expect(
+      recordTransaction({
+        accountId: a.id,
+        assetId: asset.id,
+        type: "SELL",
+        quantity: "3",
+        price: "100",
+        at: at(4),
+      }),
+    ).rejects.toThrow("未平仓");
+    await expect(
+      wealthCommand("transfer.create", {
+        fromId: a.id,
+        toId: b.id,
+        assetId: asset.id,
+        quantity: "3",
+        at: at(4),
+      }),
+    ).rejects.toThrow("未平仓");
+    await recordTransaction({
+      accountId: a.id,
+      assetId: asset.id,
+      type: "SELL",
+      quantity: "2",
+      price: "100",
+      at: at(4),
+    });
+    await recordFill({
+      tradeId: t.id,
+      action: "EXIT",
+      quantity: "5",
+      price: "110",
+      at: at(5),
+    });
+    expect(
+      (await db.trade.findUniqueOrThrow({ where: { id: t.id } })).status,
+    ).toBe("CLOSED");
+  });
+  it("在途资产和持仓使用相同的价格有效期设置", async () => {
+    const { a, b } = await setup();
+    const asset = await db.asset.create({
+      data: {
+        code: unique(),
+        name: "有效期资产",
+        assetClass: "STOCK",
+        currency: "CNY",
+      },
+    });
+    const quote = new Date(Date.now() - 10 * 86400000).toISOString();
+    await recordTransaction({
+      accountId: a.id,
+      assetId: asset.id,
+      type: "DEPOSIT",
+      quantity: "10",
+      price: "100",
+      at: quote,
+    });
+    await wealthCommand("price.create", {
+      assetId: asset.id,
+      price: "100",
+      at: quote,
+    });
+    await wealthCommand("transfer.create", {
+      fromId: a.id,
+      toId: b.id,
+      assetId: asset.id,
+      quantity: "5",
+      at: at(),
+    });
+    await dataCommand("setting.save", { key: "priceStaleDays", value: "30" });
+    const before = await portfolio();
+    const row = before.rows.find((r) => r.assetId === asset.id)!;
+    expect(row.status).toBe("VALID");
+    expect(
+      before.allocation.find((r) => r.name === "IN_TRANSIT") &&
+        D(before.allocation.find((r) => r.name === "IN_TRANSIT")!.value).gte(
+          "500",
+        ),
+    ).toBe(true);
+    await dataCommand("setting.save", { key: "priceStaleDays", value: "1" });
+    const after = await portfolio();
+    expect(D(before.assets).minus(after.assets).gte("500")).toBe(true);
+    await dataCommand("setting.save", { key: "priceStaleDays", value: "7" });
+  });
+  it("快照保留指定历史时间并拒绝未来时间", async () => {
+    const at = "2020-01-01T00:00:00Z";
+    const saved = await wealthCommand("snapshot.create", {
+      currency: "CNY",
+      at,
+    });
+    expect("at" in saved && saved.at.toISOString()).toBe(
+      new Date(at).toISOString(),
+    );
+    await expect(
+      wealthCommand("snapshot.create", {
+        currency: "CNY",
+        at: new Date(Date.now() + 86400000).toISOString(),
+      }),
+    ).rejects.toThrow("未来");
+  });
+});
+
+import { historicalLiabilities } from "@/lib/services/history";
+it("历史负债按当时记录还原，不使用后来更新的余额", async () => {
+  const liability = await wealthCommand("liability.create", {
+    name: unique(),
+    amount: "100",
+    currency: "CNY",
+  });
+  const historyDate = new Date("2025-01-01T00:00:00Z");
+  await db.liability.update({
+    where: { id: liability.id },
+    data: { at: historyDate },
+  });
+  await db.auditLog.updateMany({
+    where: { entityId: liability.id, action: "liability.create" },
+    data: { at: historyDate },
+  });
+  await wealthCommand("liability.update", { id: liability.id, amount: "50" });
+  const before = await historicalLiabilities(
+    db,
+    new Date("2025-06-01T00:00:00Z"),
+  );
+  expect(before.rows.find((r) => r.id === liability.id)?.amount).toBe("100");
+  expect(
+    (await historicalLiabilities(db, new Date())).rows.find(
+      (r) => r.id === liability.id,
+    )?.amount,
+  ).toBe("50");
+  expect(
+    (
+      await historicalLiabilities(db, new Date("2020-01-01T00:00:00Z"))
+    ).rows.some((r) => r.id === liability.id),
+  ).toBe(false);
+});
+it("现货固定乘数，防止普通价格被当作合约计算", async () => {
+  const asset = await wealthCommand("asset.create", {
+    code: unique(),
+    name: "现货乘数",
+    assetClass: "STOCK",
+    currency: "CNY",
+    instrument: "SPOT",
+    multiplier: "10",
+  });
+  expect("multiplier" in asset && asset.multiplier).toBe("1");
+});
+it("未来开仓与倒序止损事件拒绝，不覆盖当前止损", async () => {
+  const { a } = await setup();
+  const asset = await db.asset.create({
+    data: {
+      code: unique(),
+      name: "事件时间",
+      assetClass: "STOCK",
+      currency: "CNY",
+    },
+  });
+  await expect(
+    tradingCommand("trade.create", {
+      accountId: a.id,
+      assetId: asset.id,
+      direction: "LONG",
+      openedAt: new Date(Date.now() + 86400000).toISOString(),
+    }),
+  ).rejects.toThrow("未来");
+  const trade = await tradingCommand("trade.create", {
+    accountId: a.id,
+    assetId: asset.id,
+    direction: "LONG",
+    openedAt: "2025-01-01T00:00:00Z",
+  });
+  await tradingCommand("position.event", {
+    tradeId: trade.id,
+    type: "STOP_ADJUSTMENT",
+    value: "95",
+    detail: "提高止损",
+    at: "2025-01-03T00:00:00Z",
+  });
+  await expect(
+    tradingCommand("position.event", {
+      tradeId: trade.id,
+      type: "STOP_ADJUSTMENT",
+      value: "90",
+      detail: "倒序止损",
+      at: "2025-01-02T00:00:00Z",
+    }),
+  ).rejects.toThrow("早于");
+  await expect(
+    tradingCommand("position.event", {
+      tradeId: trade.id,
+      type: "STOP_ADJUSTMENT",
+      value: "99",
+      detail: "未来止损",
+      at: new Date(Date.now() + 86400000).toISOString(),
+    }),
+  ).rejects.toThrow("未来");
+  expect(
+    (await db.trade.findUniqueOrThrow({ where: { id: trade.id } })).stop,
+  ).toBe("95");
+});
+
+it("恢复拒绝账本数量一致但未平仓资产已被另行卖出的旧账本", async () => {
+  const { a, cash } = await setup();
+  const asset = await db.asset.create({
+    data: {
+      code: unique(),
+      name: "恢复持仓校验",
+      assetClass: "STOCK",
+      currency: "CNY",
+    },
+  });
+  await recordTransaction({
+    accountId: a.id,
+    assetId: cash.id,
+    type: "DEPOSIT",
+    quantity: "1000",
+    at: at(),
+  });
+  const trade = await tradingCommand("trade.create", {
+    accountId: a.id,
+    assetId: asset.id,
+    direction: "LONG",
+    openedAt: at(1),
+  });
+  await recordFill({
+    tradeId: trade.id,
+    action: "ENTRY",
+    quantity: "5",
+    price: "100",
+    at: at(2),
+  });
+  const valid = await backup();
+  await db.$transaction(async (tx) => {
+    await tx.assetBalance.update({
+      where: { accountId_assetId: { accountId: a.id, assetId: asset.id } },
+      data: { quantity: "2", cost: "200" },
+    });
+    await tx.assetBalance.update({
+      where: { accountId_assetId: { accountId: a.id, assetId: cash.id } },
+      data: { quantity: "800", cost: "800" },
+    });
+    await tx.assetTransaction.create({
+      data: {
+        sequence: 3,
+        accountId: a.id,
+        assetId: asset.id,
+        type: "SELL",
+        quantity: "-3",
+        price: "100",
+        cashDelta: "300",
+        costDelta: "-300",
+        currency: "CNY",
+        at: new Date(at(3)),
+      },
+    });
+  });
+  const invalid = await backup();
+  await expect(
+    dataCommand("backup.restore", {
+      backup: invalid,
+      checksum: invalid.checksum,
+    }),
+  ).rejects.toThrow("未平仓");
+  expect(
+    (await db.trade.findUniqueOrThrow({ where: { id: trade.id } })).quantity,
+  ).toBe("5");
+  await dataCommand("backup.restore", {
+    backup: valid,
+    checksum: valid.checksum,
+  });
+  expect(
+    (
+      await db.assetBalance.findUniqueOrThrow({
+        where: { accountId_assetId: { accountId: a.id, assetId: asset.id } },
+      })
+    ).quantity,
+  ).toBe("5");
+});
+it("历史对账能识别后来已完成的在途转账", async () => {
+  const { a, b, cash } = await setup();
+  await recordTransaction({
+    accountId: a.id,
+    assetId: cash.id,
+    type: "DEPOSIT",
+    quantity: "1000",
+    at: "2025-01-01T00:00:00Z",
+  });
+  const transfer = await wealthCommand("transfer.create", {
+    fromId: a.id,
+    toId: b.id,
+    assetId: cash.id,
+    quantity: "100",
+    at: "2025-01-02T00:00:00Z",
+  });
+  await wealthCommand("transfer.complete", {
+    id: transfer.id,
+    at: "2025-01-04T00:00:00Z",
+  });
+  const historical = await dataCommand("reconcile.check", {
+    accountId: a.id,
+    value: "1000",
+    currency: "CNY",
+    at: "2025-01-03T00:00:00Z",
+  });
+  expect("complete" in historical && historical.complete).toBe(false);
+  expect("difference" in historical && historical.difference).toBeNull();
+});

@@ -33,52 +33,52 @@ colors:
   light-chart-5: "#a73d50"
 typography:
   display:
-    fontFamily: "\"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif"
+    fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
     fontSize: "25px"
     fontWeight: 600
     lineHeight: 1.3
     letterSpacing: "-0.02em"
-    fontFeature: "\"tnum\""
+    fontFeature: '"tnum"'
   headline:
-    fontFamily: "\"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif"
+    fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
     fontSize: "27px"
     fontWeight: 600
     lineHeight: 1.6
     letterSpacing: "-0.025em"
   title:
-    fontFamily: "\"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif"
+    fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
     fontSize: "16px"
     fontWeight: 600
     lineHeight: 1.6
   body:
-    fontFamily: "\"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif"
+    fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.6
   label:
-    fontFamily: "\"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif"
+    fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
     fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.6
   button:
-    fontFamily: "\"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif"
+    fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
     fontSize: "12px"
     fontWeight: 500
     lineHeight: 1.6
   table-header:
-    fontFamily: "\"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif"
+    fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
     fontSize: "11px"
     fontWeight: 500
     lineHeight: 1.6
   nav-group:
-    fontFamily: "\"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif"
+    fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
     fontSize: "10px"
     fontWeight: 600
     lineHeight: 1.6
     letterSpacing: "0.08em"
   numeric:
     fontFamily: "ui-monospace, SFMono-Regular, monospace"
-    fontFeature: "\"tnum\""
+    fontFeature: '"tnum"'
 rounded:
   badge: "4px"
   field: "5px"
@@ -300,3 +300,9 @@ ECharts 画布高度（300px），趋势线宽度（2px）且不常显点，分�
 - **Don't** 把财富主页三个截图的核对结果扩大为全应用视觉认证。
 
 实现核对来源：`app/globals.css`、`components/shell.tsx`、`components/ui/button.tsx`、`components/wealth-view.tsx`、`components/table.tsx`、`components/charts.tsx`、`components/form.tsx` 和 `lib/utils.ts`。视觉核对来源：`.impeccable/review/desktop.png`（1433×2754）、`mobile.png`（390×3745）、`light.png`（1433×2754），均为财富主页；本次文档记录不扩大已有审查范围。
+
+## 2026-10-10 使用验收补充
+
+历史表现页增加复用既有Form的指定时间快照入口，保留原有主题、布局和字体。持仓表提供数量、成本、市值及未实现盈亏的精确排序。录入失败保留输入；本地连接失败提示先核对记录，防止重复提交。计划保存后清除旧仓位预览。
+
+本轮视觉证据限于新增历史快照表单的1440×1000桌面、390×844手机显示，以及手工录入错误与成功后的语义状态；未重新进行全站视觉设计审查。

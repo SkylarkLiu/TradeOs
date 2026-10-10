@@ -76,3 +76,36 @@ describe("金融计算", () => {
     expect(requiredContribution("100", "220", "0", 12)).toBe("10");
   });
 });
+
+import { decimal } from "@/lib/validation/common";
+import { compareValues } from "@/lib/utils";
+it("非法金额返回校验报告，不抛Decimal解析异常", () => {
+  for (const value of [
+    "abc",
+    "'\u002d20.01",
+    "1e4",
+    "1,000",
+    "",
+    "Infinity",
+    "=1+1",
+  ])
+    expect(decimal.safeParse(value).success).toBe(false);
+});
+it("金额排序保留符号、小数和超出Number精度的差异", () => {
+  const values = [
+    "0.9",
+    "-2",
+    "0.12",
+    "-10",
+    "100000000000000000.00000002",
+    "100000000000000000.00000001",
+  ];
+  expect([...values].sort(compareValues)).toEqual([
+    "-10",
+    "-2",
+    "0.12",
+    "0.9",
+    "100000000000000000.00000001",
+    "100000000000000000.00000002",
+  ]);
+});

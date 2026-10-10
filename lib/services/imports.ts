@@ -27,6 +27,8 @@ export function parseImport(raw: unknown) {
     for (const [target, source] of Object.entries(input.mapping)) {
       if (source && row[source] !== undefined) values[target] = row[source];
     }
+    for (const key of ["price", "fee", "externalId", "note", "purpose"])
+      if (values[key] !== undefined && !values[key].trim()) delete values[key];
     const result = transactionSchema.safeParse(values);
     if (!result.success)
       return {
@@ -135,7 +137,10 @@ export async function importCommand(action: string, raw: unknown) {
   );
 }
 export function safeCsv(rows: Record<string, unknown>[]) {
-  return Papa.unparse(rows, { escapeFormulae: true });
+  // Keep plain negative decimals numeric while escaping executable spreadsheet text.
+  return Papa.unparse(rows, {
+    escapeFormulae: /^[=+@\t\r]|^-(?!\d+(?:\.\d+)?$)/,
+  });
 }
 
 // Ledger quantities are net deltas; the import contract expects gross quantities.

@@ -2,7 +2,11 @@ import { z } from "zod";
 import { db } from "@/lib/repositories/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { D, canonical, sum, contractPnl } from "@/lib/calculations/decimal";
-import { historicalBalances, historicalContracts } from "./history";
+import {
+  historicalBalances,
+  historicalContracts,
+  historicalLiabilities,
+} from "./history";
 import {
   id,
   text,
@@ -91,6 +95,12 @@ export async function setBalance(
     });
     if (next.lt(sum(reserved.map((t) => t.margin))))
       throw new Error("资金已被合约保证金占用");
+  } else if (asset.instrument === "SPOT") {
+    const reserved = await tx.trade.findMany({
+      where: { accountId, assetId, status: "OPEN" },
+    });
+    if (next.lt(sum(reserved.map((t) => t.quantity))))
+      throw new Error("资产已被未平仓交易占用，请先在交易日志减仓或平仓");
   }
   return tx.assetBalance.update({
     where: { id: b.id },
@@ -103,6 +113,11 @@ export async function setBalance(
   });
 }
 export async function chronology(tx: Tx, accountId: string, at: Date) {
+  if (at > new Date()) throw new Error("真实记录不能使用未来时间");
+  const account = await tx.account.findUniqueOrThrow({
+    where: { id: accountId },
+  });
+  if (account.archived) throw new Error("账户已归档，请先恢复账户");
   const last = await tx.assetTransaction.findFirst({
     where: { accountId },
     orderBy: [{ at: "desc" }, { sequence: "desc" }],
@@ -270,6 +285,7 @@ export async function wealthCommand(action: string, raw: unknown) {
         input.code = `CASH:${input.currency}`;
         input.instrument = "SPOT";
       }
+      if (input.instrument === "SPOT") input.multiplier = "1";
       return db.$transaction(async (tx) => {
         const r = await tx.asset.create({ data: input });
         await audit(tx, action, r.id, input);
@@ -386,12 +402,15 @@ export async function wealthCommand(action: string, raw: unknown) {
       });
     }
     case "snapshot.create": {
-      const { currency: report } = z.object({ currency }).parse(raw);
+      const { currency: report, at: requestedAt } = z
+        .object({ currency, at: date.optional() })
+        .parse(raw);
+      const at = requestedAt ?? new Date();
+      if (at > new Date()) throw new Error("快照不能使用未来时间");
       return db.$transaction(async (tx) => {
-        const state = await portfolio(report, new Date(), tx);
+        const state = await portfolio(report, at, tx);
         if (!state.complete)
           throw new Error("存在缺失或过期估值，更新价格和汇率后再保存完整快照");
-        const at = new Date();
         const r = await tx.portfolioSnapshot.create({
           data: {
             currency: report,
@@ -581,7 +600,7 @@ export async function portfolio(
   const window = await staleWindow(client);
   const [balances, liabilities, transfers, derivatives] = await Promise.all([
     historicalBalances(client, at),
-    client.liability.findMany(),
+    historicalLiabilities(client, at),
     client.transfer.findMany({
       where: {
         at: { lte: at },
@@ -653,7 +672,7 @@ export async function portfolio(
         .filter((r) => balances.find((b) => b.id === r.id)?.asset.investable)
         .map((r) => r.value ?? "0"),
     ),
-    complete = rows.every((r) => r.status === "VALID"),
+    complete = rows.every((r) => r.status === "VALID") && liabilities.complete,
     debt = D(0);
   const allocation = new Map<string, ReturnType<typeof D>>();
   for (const r of rows)
@@ -674,8 +693,7 @@ export async function portfolio(
                 orderBy: { at: "desc" },
               })
               .then((r) => {
-                if (!r || at.getTime() - r.at.getTime() > 7 * 86400000)
-                  return null;
+                if (!r || at.getTime() - r.at.getTime() > window) return null;
                 return D(r.price);
               }),
       fx = await fxAt(client, a.currency, report, at);
@@ -716,7 +734,7 @@ export async function portfolio(
       (allocation.get("DERIVATIVE_PNL") ?? D(0)).plus(pnl),
     );
   }
-  for (const l of liabilities) {
+  for (const l of liabilities.rows) {
     const fx = await fxAt(client, l.currency, report, at);
     if (!fx) {
       complete = false;

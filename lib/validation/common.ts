@@ -4,7 +4,13 @@ export const decimal = z
   .string()
   .max(100)
   .regex(/^-?\d+(\.\d+)?$/, "请输入十进制数")
-  .refine((v) => D(v).isFinite(), "数值无效")
+  .refine((v) => {
+    try {
+      return D(v).isFinite();
+    } catch {
+      return false;
+    }
+  }, "数值无效")
   .transform(canonical);
 export const positive = decimal.refine((v) => D(v).gt(0), "必须大于零");
 export const nonnegative = decimal.refine((v) => D(v).gte(0), "不能小于零");
