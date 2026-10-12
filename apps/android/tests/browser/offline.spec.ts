@@ -25,7 +25,7 @@ test("本机浏览器存储重载、离线校验及JSON导出", async ({ page })
   await page.getByRole("button", { name: "离线检查", exact: true }).click();
   await page.getByRole("button", { name: "运行离线检查", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("离线能力检查通过。");
-  await expect(page.locator("li")).toHaveCount(13);
+  await expect(page.locator("li")).toHaveCount(17);
   await page.getByRole("button", { name: "备份", exact: true }).click();
   const waiting = page.waitForEvent("download");
   await page.getByRole("button", { name: "导出完整JSON", exact: true }).click();
@@ -335,4 +335,102 @@ test("策略发布、风险计划、分批成交及备份预览完整流程", as
   await expect(page.getByText(/评分 80.0 \/ 100 · 纪律达标/)).toBeVisible();
   await page.getByRole("button", { name: "策略", exact: true }).click();
   await expect(page.getByText("v2 · 草稿", { exact: false })).toBeVisible();
+});
+
+test("财富负债、在途到账、快照和财务自由在离线存储中贯通", async ({ page }) => {
+  await page.goto("/");
+  for (const name of ["资金来源", "资金目标"]) {
+    await page.getByLabel("平台", { exact: true }).fill("财富验收");
+    await page.getByLabel("账户名称", { exact: true }).fill(name);
+    await page.getByRole("button", { name: "保存账户", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("账户已保存");
+  }
+  await page
+    .getByLabel("账户", { exact: true })
+    .selectOption({ label: "财富验收 / 资金来源 · CNY" });
+  await page.getByLabel("金额", { exact: true }).fill("10000");
+  await page.getByLabel("发生时间", { exact: true }).fill("2025-01-01T08:00");
+  await page.getByRole("button", { name: "保存流水", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("流水与余额");
+  await page.getByRole("button", { name: "划转", exact: true }).click();
+  await page
+    .getByLabel("转出账户", { exact: true })
+    .selectOption({ label: "财富验收 / 资金来源 · CNY" });
+  await page
+    .getByLabel("转入账户", { exact: true })
+    .selectOption({ label: "财富验收 / 资金目标 · CNY" });
+  await page.getByLabel("划转数量", { exact: true }).fill("2000");
+  await page.getByLabel("划转手续费（账户币种）", { exact: true }).fill("1");
+  await page
+    .getByRole("button", { name: "转出并记录在途", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("资产在途");
+  await page.getByRole("button", { name: "财富", exact: true }).click();
+  await expect(page.getByTestId("wealth-net")).toHaveText("9999.00");
+  await expect(
+    page.getByText("当前估值完整 · CNY · 1 笔在途", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "负债", exact: true }).click();
+  await page.getByLabel("负债名称", { exact: true }).fill("验收欠款");
+  await page.getByLabel("欠款余额", { exact: true }).fill("1000");
+  await page.getByRole("button", { name: "保存负债", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("负债及余额历史");
+  await page.getByRole("button", { name: "总览", exact: true }).click();
+  await expect(page.getByTestId("wealth-net")).toHaveText("8999.00");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.screenshot({
+    path: "../../artifacts/android/wealth-tablet-0.6.0.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: "../../artifacts/android/wealth-mobile-0.6.0.png",
+    fullPage: true,
+  });
+  expect(
+    await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth <=
+        document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
+  await page.getByRole("button", { name: "快照", exact: true }).click();
+  await page.getByRole("button", { name: "保存当前快照", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("完整财富快照");
+  await page.getByRole("button", { name: "划转", exact: true }).click();
+  await page.getByRole("button", { name: "确认到账", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("目标账户已更新");
+  await page.getByRole("button", { name: "财富", exact: true }).click();
+  await expect(page.getByTestId("wealth-net")).toHaveText("8999.00");
+  await page.getByRole("button", { name: "财务自由", exact: true }).click();
+  await page.getByRole("button", { name: "保存财务目标", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("财务自由目标已保存");
+  await expect(page.getByRole("table").first()).toBeVisible();
+  await page.screenshot({
+    path: "../../artifacts/android/fire-mobile-0.6.0.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.screenshot({
+    path: "../../artifacts/android/fire-tablet-0.6.0.png",
+    fullPage: true,
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "财富", exact: true }).click();
+  await expect(page.getByTestId("wealth-net")).toHaveText("8999.00");
+  await page.getByRole("button", { name: "快照", exact: true }).click();
+  await expect(
+    page.getByRole("cell", { name: "8999.00", exact: true }).first(),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "备份", exact: true }).click();
+  const waiting = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出完整JSON", exact: true }).click();
+  const file = await waiting,
+    path = await file.path();
+  const chooser = page.waitForEvent("filechooser");
+  await page
+    .getByRole("button", { name: "选择JSON并预览", exact: true })
+    .click();
+  await (await chooser).setFiles(path!);
+  await expect(page.getByRole("status")).toContainText("校验通过");
 });

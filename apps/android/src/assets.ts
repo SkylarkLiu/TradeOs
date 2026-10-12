@@ -19,7 +19,15 @@ export const assetSchema = z.object({
   id,
   code: text,
   name: text,
-  assetClass: z.enum(["STOCK", "FUND", "CRYPTO", "OTHER"]),
+  assetClass: z.enum([
+    "STOCK",
+    "FUND",
+    "CRYPTO",
+    "BOND",
+    "GOLD",
+    "REAL_ESTATE",
+    "OTHER",
+  ]),
   currency,
 });
 export const holdingSchema = z.object({
@@ -76,7 +84,7 @@ export function insertRow(
 ): Statement {
   const keys = Object.keys(row);
   return {
-    statement: `INSERT INTO ${table}(${keys.join(",")}) VALUES(${keys.map(() => "?").join(",")})`,
+    statement: `INSERT INTO "${table}"(${keys.map((k) => `"${k}"`).join(",")}) VALUES(${keys.map(() => "?").join(",")})`,
     values: keys.map((k) => row[k]),
   };
 }

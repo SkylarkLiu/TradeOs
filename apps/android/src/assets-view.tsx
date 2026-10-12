@@ -53,14 +53,14 @@ export function AssetsView({
       <div className="heading">
         <h1>现货资产账本</h1>
         <p>
-          买卖同步更新现金、持仓、成本和已实现损益。当前按原币种汇总，账户须与资产结算币种一致。
+          买卖同步更新现金、持仓、成本和已实现损益。当前为账户内资产，未包含在途；此页使用最近报价，完整估值及报价有效期检查请查看财富页。账户须与资产结算币种一致。
         </p>
       </div>
       <div className="totals">
         {portfolioGroups(state.accounts, state).map((g) => (
           <div key={g.currency}>
             <span>
-              {g.currency} {g.missing ? "已知资产小计" : "资产合计"}
+              {g.currency} {g.missing ? "账户内已知小计" : "账户内资产"}
             </span>
             <strong>{D(g.value).toFixed(2)}</strong>
             {g.missing > 0 && (
@@ -97,6 +97,9 @@ export function AssetsView({
                   <option value="STOCK">股票</option>
                   <option value="FUND">基金</option>
                   <option value="CRYPTO">加密资产</option>
+                  <option value="BOND">债券</option>
+                  <option value="GOLD">黄金</option>
+                  <option value="REAL_ESTATE">房产</option>
                   <option value="OTHER">其他现货</option>
                 </select>
               </label>
@@ -361,7 +364,15 @@ export function AssetsView({
                     {state.accounts.find((a) => a.id === e.accountId)?.name}
                   </td>
                   <td>{state.assets.find((a) => a.id === e.assetId)?.code}</td>
-                  <td>{types[e.type]}</td>
+                  <td>
+                    {state.transfers.some((t) => t.sourceEntryId === e.id)
+                      ? "内部划转转出"
+                      : state.transfers.some(
+                            (t) => t.destinationEntryId === e.id,
+                          )
+                        ? "内部划转到账"
+                        : types[e.type]}
+                  </td>
                   <td className="number">{e.quantity}</td>
                   <td className="number">{e.price}</td>
                   <td className="number">{e.fee}</td>

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Capacitor } from "@capacitor/core";
 import { z } from "zod";
-import { D, sum, projectWealth } from "@tradeos/core";
+import { D, sum } from "@tradeos/core";
 import { Ledger, validateBackup, type State } from "./ledger";
 import { openSql } from "./sql";
 import { exportJson, importJson, saveBefore, readBefore } from "./files";
@@ -12,6 +12,8 @@ import { TradingView, StrategyView } from "./trading-view";
 import { ReviewView, PerformanceView } from "./review-view";
 import { emptyReviews } from "./review";
 import { emptyTrading } from "./trading";
+import { WealthView, TransferView, FireView } from "./wealth-view";
+import { emptyWealth } from "./wealth";
 import { emptyAssets } from "./assets";
 import { AssetsView } from "./assets-view";
 const localNow = () =>
@@ -42,6 +44,7 @@ function App() {
       ...emptyAssets(),
       ...emptyTrading(),
       ...emptyReviews(),
+      ...emptyWealth(),
     }),
     [ready, setReady] = useState(false),
     [busy, setBusy] = useState(false),
@@ -52,10 +55,6 @@ function App() {
       ReturnType<typeof validateBackup>
     > | null>(null),
     [confirmed, setConfirmed] = useState(false),
-    [forecast, setForecast] = useState<{
-      nominal: string;
-      real: string;
-    } | null>(null),
     [checks, setChecks] = useState<string[]>([]);
   const refresh = async () => setState(await app.state());
   useEffect(() => {
@@ -119,7 +118,9 @@ function App() {
           "交易",
           "复盘",
           "绩效",
-          "预测",
+          "财富",
+          "划转",
+          "财务自由",
           "备份",
           "离线检查",
         ].map((t) => (
@@ -134,8 +135,9 @@ function App() {
       </nav>
       <main>
         <p className="scope">
-          安卓离线复盘版 0.4.0 ·
-          计划、成交、复盘和策略改进已接入本机账本。合约、回测及电脑备份迁移仍在后续阶段。
+          安卓离线财富版 0.6.0 ·
+          财富、负债、内部划转与财务自由规划已接入本机账本。报价及汇率手动维护；0.5.0
+          回测暂缓，尚未接入行情数据源。
         </p>
         {error && (
           <p className="error" role="alert">
@@ -360,13 +362,19 @@ function App() {
                               }
                             </td>
                             <td>
-                              {
-                                {
-                                  DEPOSIT: "存入",
-                                  WITHDRAWAL: "取出",
-                                  ADJUSTMENT: "调整",
-                                }[e.type]
-                              }
+                              {state.transfers.some(
+                                (t) => t.sourceEntryId === e.id,
+                              )
+                                ? "内部划转转出"
+                                : state.transfers.some(
+                                      (t) => t.destinationEntryId === e.id,
+                                    )
+                                  ? "内部划转到账"
+                                  : {
+                                      DEPOSIT: "存入",
+                                      WITHDRAWAL: "取出",
+                                      ADJUSTMENT: "调整",
+                                    }[e.type]}
                             </td>
                             <td className="number">{e.amount}</td>
                             <td className="number">{e.fee}</td>
@@ -434,113 +442,32 @@ function App() {
                 notice={setNotice}
               />
             )}
-            {tab === "预测" && (
-              <>
-                <h1>财富增长计算验证</h1>
-                <p>
-                  固定假设下的名义资产与购买力，不是收益保证；金额单位由你统一选择。
-                </p>
-                <section>
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      try {
-                        const fd = new FormData(e.currentTarget);
-                        const current = String(fd.get("current")),
-                          monthly = String(fd.get("monthly")),
-                          annual = D(String(fd.get("annual"))).div(100),
-                          inflation = D(String(fd.get("inflation"))).div(100),
-                          years = Number(fd.get("years"));
-                        if (
-                          D(current).lt(0) ||
-                          D(monthly).lt(0) ||
-                          annual.lte(-1) ||
-                          annual.gt(2) ||
-                          inflation.lte(-1) ||
-                          inflation.gt(2) ||
-                          !Number.isInteger(years) ||
-                          years < 1 ||
-                          years > 60
-                        )
-                          throw new Error(
-                            "请填写有效资产、投入和1–60年的预测期限。年率须大于-100%且不超过200%。",
-                          );
-                        setForecast(
-                          projectWealth(
-                            current,
-                            monthly,
-                            annual.toFixed(),
-                            inflation.toFixed(),
-                            years * 12,
-                          ).at(-1)!,
-                        );
-                        setError("");
-                      } catch (e) {
-                        setError(message(e));
-                      }
-                    }}
-                  >
-                    <div className="pair">
-                      <label>
-                        当前资产
-                        <input
-                          name="current"
-                          defaultValue="100000"
-                          required
-                          inputMode="decimal"
-                        />
-                      </label>
-                      <label>
-                        每月投入
-                        <input
-                          name="monthly"
-                          defaultValue="1000"
-                          required
-                          inputMode="decimal"
-                        />
-                      </label>
-                      <label>
-                        年收益假设（%）
-                        <input
-                          name="annual"
-                          defaultValue="5"
-                          required
-                          inputMode="decimal"
-                        />
-                      </label>
-                      <label>
-                        年通胀假设（%）
-                        <input
-                          name="inflation"
-                          defaultValue="2"
-                          required
-                          inputMode="decimal"
-                        />
-                      </label>
-                    </div>
-                    <label>
-                      预测年数
-                      <input
-                        name="years"
-                        defaultValue="10"
-                        type="number"
-                        min="1"
-                        max="60"
-                        required
-                      />
-                    </label>
-                    <button>计算</button>
-                  </form>
-                  {forecast && (
-                    <dl>
-                      <dt>名义资产</dt>
-                      <dd>{money(forecast.nominal)}</dd>
-                      <dt>以当前购买力计</dt>
-                      <dd>{money(forecast.real)}</dd>
-                    </dl>
-                  )}
-                </section>
-              </>
+            {tab === "财富" && (
+              <WealthView
+                state={state}
+                ledger={app}
+                busy={busy}
+                act={act}
+                notice={setNotice}
+              />
+            )}
+            {tab === "划转" && (
+              <TransferView
+                state={state}
+                ledger={app}
+                busy={busy}
+                act={act}
+                notice={setNotice}
+              />
+            )}
+            {tab === "财务自由" && (
+              <FireView
+                state={state}
+                ledger={app}
+                busy={busy}
+                act={act}
+                notice={setNotice}
+              />
             )}
             {tab === "备份" && (
               <>
@@ -610,7 +537,13 @@ function App() {
                         {pending.payload.plans.length} 项 · 持仓事件{" "}
                         {pending.payload.events.length} 条 · 复盘{" "}
                         {pending.payload.reviews.length} 条 · 策略改进{" "}
-                        {pending.payload.improvements.length} 项
+                        {pending.payload.improvements.length} 项 · 负债{" "}
+                        {pending.payload.liabilities.length} 项 · 负债历史{" "}
+                        {pending.payload.liabilityBalances.length} 条 · 汇率{" "}
+                        {pending.payload.fxRates.length} 条 · 划转{" "}
+                        {pending.payload.transfers.length} 笔 · 财富快照{" "}
+                        {pending.payload.snapshots.length} 份 · 财务目标{" "}
+                        {pending.payload.goals.length} 项
                       </p>
                       <label className="check">
                         <input

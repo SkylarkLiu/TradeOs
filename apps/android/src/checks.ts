@@ -1,3 +1,5 @@
+import { D } from "@tradeos/core";
+import { wealthPortfolio, fireProjection } from "./wealth";
 import { Ledger, digest } from "./ledger";
 import { Capacitor } from "@capacitor/core";
 import { nativeSql, browserSql } from "./sql";
@@ -17,6 +19,15 @@ export async function runChecks() {
     await ledger.init();
     await db.batch([
       ...[
+        "WealthAccountConfig",
+        "WealthAssetConfig",
+        "LiabilityBalance",
+        "Liability",
+        "FXRate",
+        "InternalTransfer",
+        "FinancialGoal",
+        "WealthSnapshot",
+        "WealthSettings",
         "ReviewImprovement",
         "TradeReview",
         "ReviewSettings",
@@ -272,6 +283,90 @@ export async function runChecks() {
       (await ledger.state()).improvements.length === 1 &&
         (await ledger.state()).versions.length === 2,
       "策略改进及完整备份恢复",
+    );
+    const target = await ledger.createAccount({
+      name: "划转目标",
+      platform: "独立验证账户",
+      currency: "CNY",
+    });
+    const before = wealthPortfolio(await ledger.state()).net;
+    const transfer = await ledger.createTransfer({
+      fromId: a.id,
+      toId: target.id,
+      quantity: "100",
+      fee: "1",
+      at: "2020-01-06T00:00:00Z",
+    });
+    check(
+      wealthPortfolio(await ledger.state()).net ===
+        D(before).minus(1).toFixed(),
+      "在途资产不重复或丢失，手续费正确扣减",
+    );
+    await ledger.completeTransfer({
+      id: transfer.id,
+      at: "2020-01-07T00:00:00Z",
+    });
+    const liability = await ledger.createLiability({
+      name: "隔离负债",
+      currency: "CNY",
+      amount: "10",
+      investable: 1,
+      at: "2020-01-07T00:00:00Z",
+    });
+    await ledger.updateLiability({
+      id: liability.id,
+      amount: "5",
+      investable: 1,
+      at: "2020-01-08T00:00:00Z",
+    });
+    check(
+      wealthPortfolio(await ledger.state()).net ===
+        D(before).minus(6).toFixed(),
+      "到账保持资产、负债余额及历史准确",
+    );
+    const usd = await ledger.createAccount({
+      name: "美元",
+      platform: "独立验证账户",
+      currency: "USD",
+    });
+    await ledger.post({
+      accountId: usd.id,
+      type: "DEPOSIT",
+      amount: "1",
+      at: "2020-01-01T00:00:00Z",
+    });
+    check(
+      !wealthPortfolio(await ledger.state()).complete,
+      "缺失汇率不生成完整估值",
+    );
+    await ledger.setFx({
+      from: "USD",
+      to: "CNY",
+      rate: "7",
+      at: new Date().toISOString(),
+    });
+    await ledger.saveWealthSnapshot({ currency: "CNY" });
+    const retirement = new Date();
+    retirement.setFullYear(retirement.getFullYear() + 10);
+    const goal = await ledger.saveGoal({
+      name: "隔离目标",
+      age: 35,
+      retirementAge: 45,
+      retirementDate: retirement.toISOString(),
+      currency: "CNY",
+      monthlyContribution: "1000",
+      monthlyExpense: "5000",
+      inflation: "0.02",
+      conservative: "0.02",
+      baseReturn: "0.05",
+      optimistic: "0.08",
+      withdrawalRate: "0.04",
+    });
+    await ledger.restore(await ledger.backup());
+    check(
+      (await ledger.state()).snapshots.length === 1 &&
+        fireProjection(await ledger.state(), goal.id)?.complete === true,
+      "财富快照、财务自由及完整备份恢复",
     );
     return checks;
   } finally {

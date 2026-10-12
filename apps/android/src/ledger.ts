@@ -46,6 +46,16 @@ import {
   scoreSettingsInsert,
   type ReviewState,
 } from "./review";
+import {
+  WealthCommands,
+  readWealth,
+  wealthTables,
+  wealthStateSchema,
+  emptyWealth,
+  validateWealth,
+  valuationSetting,
+  type WealthState,
+} from "./wealth";
 export const accountSchema = z.object({
   id,
   name: text,
@@ -69,7 +79,8 @@ export type Account = z.infer<typeof accountSchema>;
 export type Entry = z.infer<typeof entrySchema>;
 export type State = { accounts: Account[]; entries: Entry[] } & AssetState &
   TradingState &
-  ReviewState;
+  ReviewState &
+  WealthState;
 const schema = [
   `CREATE TABLE IF NOT EXISTS FinancialAccount(id TEXT PRIMARY KEY,name TEXT NOT NULL,platform TEXT NOT NULL,currency TEXT NOT NULL,balance TEXT NOT NULL DEFAULT '0',sequence INTEGER NOT NULL DEFAULT 0,UNIQUE(platform,name,currency));`,
   `CREATE TABLE IF NOT EXISTS CashLedger(id TEXT PRIMARY KEY,accountId TEXT NOT NULL REFERENCES FinancialAccount(id) ON DELETE RESTRICT,type TEXT NOT NULL,amount TEXT NOT NULL,fee TEXT NOT NULL,delta TEXT NOT NULL,at TEXT NOT NULL,sequence INTEGER NOT NULL,note TEXT NOT NULL,UNIQUE(accountId,sequence));`,
@@ -148,6 +159,16 @@ export async function validateBackup(raw: unknown) {
           .extend(reviewStateSchema.shape),
         checksum: z.string().regex(/^[a-f0-9]{64}$/),
       }),
+      z.object({
+        kind: z.literal("tradeos-android-prototype"),
+        version: z.literal(6),
+        payload: basePayload
+          .extend(assetStateSchema.shape)
+          .extend(tradingStateSchema.shape)
+          .extend(reviewStateSchema.shape)
+          .extend(wealthStateSchema.shape),
+        checksum: z.string().regex(/^[a-f0-9]{64}$/),
+      }),
     ])
     .parse(raw);
   if (
@@ -159,6 +180,7 @@ export async function validateBackup(raw: unknown) {
     ...emptyAssets(),
     ...emptyTrading(),
     ...emptyReviews(),
+    ...emptyWealth(),
     ...file.payload,
   };
   const accountIds = new Set(payload.accounts.map((a) => a.id));
@@ -266,9 +288,10 @@ export async function validateBackup(raw: unknown) {
     throw new Error("备份报价关联或时间无效");
   validateTrading(payload);
   validateReviews(payload);
+  validateWealth(payload);
   return {
     kind: file.kind,
-    version: 4 as const,
+    version: 6 as const,
     payload,
     checksum: await digest(payload),
   };
@@ -278,11 +301,18 @@ export class Ledger {
   private pending: Promise<unknown> = Promise.resolve();
   private trading: TradingCommands;
   private review: ReviewCommands;
+  private wealth: WealthCommands;
   constructor(private db: Sql) {
     this.trading = new TradingCommands(db, (raw, reservation) =>
       this.prepareAsset(raw, reservation),
     );
     this.review = new ReviewCommands(db, this.trading);
+    this.wealth = new WealthCommands(
+      db,
+      (raw) => this.prepareCash(raw),
+      (raw) => this.prepareAsset(raw),
+      () => this.read(),
+    );
   }
   private serial<T>(work: () => Promise<T>): Promise<T> {
     const result = this.pending.then(work);
@@ -299,7 +329,11 @@ export class Ledger {
       },
     ]);
     const current = await this.db.query("SELECT version FROM OfflineSchema");
-    if (current.length > 1 || (current[0] && Number(current[0].version) > 4))
+    if (
+      current.length > 1 ||
+      (current[0] &&
+        (Number(current[0].version) > 6 || Number(current[0].version) === 5))
+    )
       throw new Error("账本由更新版本创建，请安装最新版本，数据未被修改。");
     if (!current[0] || Number(current[0].version) < 2)
       await this.db.batch([
@@ -328,12 +362,22 @@ export class Ledger {
           values: [],
         },
       ]);
+    if (!current[0] || Number(current[0].version) < 6)
+      await this.db.batch([
+        ...wealthTables.map((statement) => ({ statement, values: [] })),
+        { statement: "DELETE FROM OfflineSchema", values: [] },
+        {
+          statement: "INSERT INTO OfflineSchema(version) VALUES(6)",
+          values: [],
+        },
+      ]);
   }
 
   private async read(): Promise<State> {
     return {
       ...(await readTrading(this.db)),
       ...(await readReviews(this.db)),
+      ...(await readWealth(this.db)),
       assets: (await this.db.query("SELECT * FROM Asset ORDER BY code")).map(
         (a) => assetSchema.parse(a),
       ),
@@ -384,59 +428,64 @@ export class Ledger {
       return a;
     });
   }
+  private async prepareCash(raw: unknown) {
+    const input = z
+      .object({
+        accountId: id,
+        type: z.enum(["DEPOSIT", "WITHDRAWAL", "ADJUSTMENT"]),
+        amount: decimal,
+        fee: nonnegative.default("0"),
+        at: date.transform((d) => d.toISOString()),
+        note: z.string().max(1000).default(""),
+      })
+      .parse(raw);
+    if (new Date(input.at) > new Date()) throw new Error("不能记录未来时间");
+    if (
+      D(input.amount).eq(0) ||
+      (input.type !== "ADJUSTMENT" && D(input.amount).lte(0))
+    )
+      throw new Error("金额必须大于零，调整可以填负数");
+    const rawAccount = (
+      await this.db.query("SELECT * FROM FinancialAccount WHERE id=?", [
+        input.accountId,
+      ])
+    )[0];
+    if (!rawAccount) throw new Error("账户不存在");
+    const a = accountSchema.parse(rawAccount);
+    const previous = (
+      await this.db.query(
+        "SELECT at FROM (SELECT at,sequence FROM CashLedger WHERE accountId=? UNION ALL SELECT at,sequence FROM AssetLedger WHERE accountId=?) ORDER BY sequence DESC LIMIT 1",
+        [a.id, a.id],
+      )
+    )[0];
+    if (previous && input.at < String(previous.at))
+      throw new Error("流水不能早于上一笔记录");
+    const delta = (
+        input.type === "WITHDRAWAL" ? D(input.amount).neg() : D(input.amount)
+      ).minus(input.fee),
+      balance = D(a.balance).plus(delta);
+    if (balance.lt(0)) throw new Error("可用余额不足");
+    const e: Entry = {
+      ...input,
+      id: crypto.randomUUID(),
+      delta: canonical(delta),
+      sequence: a.sequence + 1,
+    };
+    const statements: Statement[] = [
+      entryInsert(e),
+      {
+        statement:
+          "UPDATE FinancialAccount SET balance=?,sequence=? WHERE id=?",
+        values: [canonical(balance), e.sequence, a.id],
+      },
+    ];
+    return { entry: e, statements };
+  }
   post(raw: unknown) {
     return this.serial(async () => {
-      const input = z
-        .object({
-          accountId: id,
-          type: z.enum(["DEPOSIT", "WITHDRAWAL", "ADJUSTMENT"]),
-          amount: decimal,
-          fee: nonnegative.default("0"),
-          at: date.transform((d) => d.toISOString()),
-          note: z.string().max(1000).default(""),
-        })
-        .parse(raw);
-      if (new Date(input.at) > new Date()) throw new Error("不能记录未来时间");
-      if (
-        D(input.amount).eq(0) ||
-        (input.type !== "ADJUSTMENT" && D(input.amount).lte(0))
-      )
-        throw new Error("金额必须大于零，调整可以填负数");
-      const rawAccount = (
-        await this.db.query("SELECT * FROM FinancialAccount WHERE id=?", [
-          input.accountId,
-        ])
-      )[0];
-      if (!rawAccount) throw new Error("账户不存在");
-      const a = accountSchema.parse(rawAccount);
-      const previous = (
-        await this.db.query(
-          "SELECT at FROM (SELECT at,sequence FROM CashLedger WHERE accountId=? UNION ALL SELECT at,sequence FROM AssetLedger WHERE accountId=?) ORDER BY sequence DESC LIMIT 1",
-          [a.id, a.id],
-        )
-      )[0];
-      if (previous && input.at < String(previous.at))
-        throw new Error("流水不能早于上一笔记录");
-      const delta = (
-          input.type === "WITHDRAWAL" ? D(input.amount).neg() : D(input.amount)
-        ).minus(input.fee),
-        balance = D(a.balance).plus(delta);
-      if (balance.lt(0)) throw new Error("可用余额不足");
-      const e: Entry = {
-        ...input,
-        id: crypto.randomUUID(),
-        delta: canonical(delta),
-        sequence: a.sequence + 1,
-      };
-      await this.db.batch([
-        entryInsert(e),
-        {
-          statement:
-            "UPDATE FinancialAccount SET balance=?,sequence=? WHERE id=?",
-          values: [canonical(balance), e.sequence, a.id],
-        },
-      ]);
-      return e;
+      const prepared = await this.prepareCash(raw);
+      await this.db.batch(prepared.statements);
+      return prepared.entry;
     });
   }
   createAsset(raw: unknown) {
@@ -621,13 +670,40 @@ export class Ledger {
   improveStrategy(raw: unknown) {
     return this.serial(() => this.review.improveStrategy(raw));
   }
+  setFx(raw: unknown) {
+    return this.serial(() => this.wealth.setFx(raw));
+  }
+  createLiability(raw: unknown) {
+    return this.serial(() => this.wealth.createLiability(raw));
+  }
+  updateLiability(raw: unknown) {
+    return this.serial(() => this.wealth.updateLiability(raw));
+  }
+  configureWealth(raw: unknown) {
+    return this.serial(() => this.wealth.configure(raw));
+  }
+  setValuationWindow(raw: unknown) {
+    return this.serial(() => this.wealth.setWindow(raw));
+  }
+  createTransfer(raw: unknown) {
+    return this.serial(() => this.wealth.createTransfer(raw));
+  }
+  completeTransfer(raw: unknown) {
+    return this.serial(() => this.wealth.completeTransfer(raw));
+  }
+  saveGoal(raw: unknown) {
+    return this.serial(() => this.wealth.saveGoal(raw));
+  }
+  saveWealthSnapshot(raw: unknown) {
+    return this.serial(() => this.wealth.snapshot(raw));
+  }
   backup() {
     return this.serial(async () => {
       const s = await this.read();
       const payload = { createdAt: new Date().toISOString(), ...s };
       return {
         kind: "tradeos-android-prototype" as const,
-        version: 4 as const,
+        version: 6 as const,
         payload,
         checksum: await digest(payload),
       };
@@ -638,6 +714,15 @@ export class Ledger {
       const file = await validateBackup(raw);
       await this.db.batch([
         ...[
+          "WealthAccountConfig",
+          "WealthAssetConfig",
+          "LiabilityBalance",
+          "Liability",
+          "FXRate",
+          "InternalTransfer",
+          "FinancialGoal",
+          "WealthSnapshot",
+          "WealthSettings",
           "ReviewImprovement",
           "TradeReview",
           "ReviewSettings",
@@ -673,6 +758,21 @@ export class Ledger {
           insertRow("ReviewImprovement", s),
         ),
         scoreSettingsInsert(file.payload.scoreRules),
+        ...file.payload.fxRates.map((r) => insertRow("FXRate", r)),
+        ...file.payload.liabilities.map((r) => insertRow("Liability", r)),
+        ...file.payload.liabilityBalances.map((r) =>
+          insertRow("LiabilityBalance", r),
+        ),
+        ...file.payload.transfers.map((r) => insertRow("InternalTransfer", r)),
+        ...file.payload.accountConfig.map((r) =>
+          insertRow("WealthAccountConfig", r),
+        ),
+        ...file.payload.assetConfig.map((r) =>
+          insertRow("WealthAssetConfig", r),
+        ),
+        ...file.payload.goals.map((r) => insertRow("FinancialGoal", r)),
+        ...file.payload.snapshots.map((r) => insertRow("WealthSnapshot", r)),
+        valuationSetting(file.payload.valuationMaxDays),
       ]);
     });
   }

@@ -12,6 +12,7 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class OfflineRuntimeTest {
+    private String lastTradeToken;
     private String js(ActivityScenario<MainActivity> app, String script) throws Exception {
         CountDownLatch latch = new CountDownLatch(1); AtomicReference<String> value = new AtomicReference<>();
         String body=script.contains(";")?script:"return ("+script+");";
@@ -31,7 +32,7 @@ public class OfflineRuntimeTest {
             until(app,"document.body.innerText.includes('运行离线检查')");
             js(app,"document.querySelector('section button').click()");
             until(app,"document.body.innerText.includes('离线能力检查通过。')");
-            assertEquals("13",js(app,"document.querySelectorAll('li').length"));
+            assertEquals("17",js(app,"document.querySelectorAll('li').length"));
         }
     }
     @Test public void privateBeforeRestoreFileRoundTrip() throws Exception {
@@ -66,6 +67,7 @@ public class OfflineRuntimeTest {
             until(app,"document.body.innerText.includes('创建资产')");
             js(app,"document.querySelector('input[name=code]').value='NATIVE-"+token+"';document.querySelector('input[name=name]').value='虚拟现货';document.querySelector('form').requestSubmit()");
             until(app,"document.body.innerText.includes('资产已保存。')");
+            until(app,"[...document.querySelector('select[name=assetId]').options].some(o=>o.textContent.includes('NATIVE-"+token+"'))");
             js(app,"const a=document.querySelector('select[name=accountId]');a.value=[...a.options].find(o=>o.textContent.includes('asset-"+token+"')).value;a.dispatchEvent(new Event('change',{bubbles:true}))");
             js(app,"const a=document.querySelector('select[name=assetId]');a.value=[...a.options].find(o=>o.textContent.includes('NATIVE-"+token+"')).value;document.querySelector('input[name=quantity]').value='10';document.querySelector('input[name=price]').value='10';document.querySelector('input[name=fee]').value='1';document.querySelector('input[name=at]').value='2025-01-02T08:00';document.querySelectorAll('form')[1].requestSubmit()");
             until(app,"document.body.innerText.includes('现金、持仓和资产流水已一起保存。')");
@@ -86,6 +88,7 @@ public class OfflineRuntimeTest {
     }
     @Test public void nativeStrategyAndTradeFills() throws Exception {
         String token=Long.toString(System.currentTimeMillis());
+        lastTradeToken=token;
         try(ActivityScenario<MainActivity> app=ActivityScenario.launch(MainActivity.class)) {
             until(app,"document.body.innerText.includes('创建账户')");
             js(app,"document.querySelector('input[name=platform]').value='原生交易验收';document.querySelector('input[name=name]').value='trade-"+token+"';document.querySelector('form').requestSubmit()");
@@ -99,7 +102,7 @@ public class OfflineRuntimeTest {
             js(app,"[...document.querySelectorAll('nav button')].find(b=>b.textContent==='策略').click()");
             until(app,"document.body.innerText.includes('保存策略草稿')");
             js(app,"const f=document.querySelector('form');f.querySelector('input[name=name]').value='策略-"+token+"';f.querySelector('input[name=market]').value='股票现货';f.querySelector('input[name=timeframe]').value='日线';f.querySelector('input[name=environment]').value='上涨';f.querySelector('textarea').value='突破二十日高点入场，回落到止损价退出，到达目标后止盈，所有成交必须记录。';f.requestSubmit()");
-            until(app,"document.body.innerText.includes('策略草稿已保存')");
+            until(app,"[...document.querySelectorAll('section')].some(s=>s.textContent.includes('策略-"+token+"'))");
             js(app,"const section=[...document.querySelectorAll('section')].find(s=>s.textContent.includes('策略-"+token+"'));section.querySelector('details').open=true;[...section.querySelectorAll('button')].find(b=>b.textContent==='发布 v1').click()");
             until(app,"document.body.innerText.includes('策略版本已发布。')");
             js(app,"[...document.querySelectorAll('nav button')].find(b=>b.textContent==='交易').click()");
@@ -124,14 +127,14 @@ public class OfflineRuntimeTest {
             until(app,"document.body.innerText.includes('创建账户')");
             js(app,"[...document.querySelectorAll('nav button')].find(b=>b.textContent==='复盘').click()");
             until(app,"document.body.innerText.includes('保存一次复盘')");
-            js(app,"const f=document.querySelector('form[aria-label=复盘表单]');const a=f.querySelector('select[name=tradeId]');a.value=[...a.options].findLast(o=>o.textContent.includes('TRADE-')).value;f.querySelector('input[name=at]').value='2025-02-01T08:00';[...f.querySelectorAll('input[type=number]')].forEach(i=>i.value='4');f.querySelector('input[name=tags]').value='按计划执行';f.querySelector('textarea[name=content]').value='本次按计划完成交易，下一次入场前再次核对风险预算与止损。';f.querySelector('textarea[name=lessons]').value='先核对风险';f.querySelector('textarea[name=nextAction]').value='入场前确认仓位和止损';f.requestSubmit()");
-            until(app,"document.body.innerText.includes('复盘已保存')");
-            js(app,"const history=[...document.querySelectorAll('section')].find(s=>s.textContent.includes('复盘历史'));history.querySelector('details').open=true;const detail=[...history.querySelectorAll('details')].find(d=>d.querySelector('summary')?.textContent==='根据本次复盘生成策略改进草稿');detail.open=true;const f=detail.querySelector('form');f.querySelector('textarea').value+='新增入场前逐项复核风险预算和止损。';f.requestSubmit()");
+            js(app,"const f=document.querySelector('form[aria-label=复盘表单]');const a=f.querySelector('select[name=tradeId]');a.value=[...a.options].find(o=>o.textContent.includes('TRADE-"+lastTradeToken+"')).value;f.querySelector('input[name=at]').value='2025-02-01T08:00';[...f.querySelectorAll('input[type=number]')].forEach(i=>i.value='4');f.querySelector('input[name=tags]').value='按计划执行';f.querySelector('textarea[name=content]').value='本次按计划完成交易，下一次入场前再次核对风险预算与止损。';f.querySelector('textarea[name=lessons]').value='先核对风险';f.querySelector('textarea[name=nextAction]').value='入场前确认仓位和止损';f.requestSubmit()");
+            until(app,"[...document.querySelectorAll('details summary')].some(s=>s.textContent.includes('TRADE-"+lastTradeToken+"'))");
+            js(app,"const history=[...document.querySelectorAll('section')].find(s=>s.textContent.includes('复盘历史'));const entry=[...history.querySelectorAll('details')].find(d=>d.querySelector('summary')?.textContent.includes('TRADE-"+lastTradeToken+"'));entry.open=true;const detail=[...entry.querySelectorAll('details')].find(d=>d.querySelector('summary')?.textContent==='根据本次复盘生成策略改进草稿');detail.open=true;const f=detail.querySelector('form');f.querySelector('textarea').value+='新增入场前逐项复核风险预算和止损。';f.requestSubmit()");
             until(app,"document.body.innerText.includes('改进草稿已生成')");
             assertEquals("true",js(app,"document.body.innerText.includes('已生成改进版本 v2')"));
             js(app,"[...document.querySelectorAll('nav button')].find(b=>b.textContent==='绩效').click()");
             until(app,"document.body.innerText.includes('结果与纪律')");
-            js(app,"const a=document.querySelector('select[aria-label=绩效账户]');a.value=[...a.options].findLast(o=>o.textContent.includes('原生交易验收 / trade-')).value;a.dispatchEvent(new Event('change',{bubbles:true}))");
+            js(app,"const a=document.querySelector('select[aria-label=绩效账户]');a.value=[...a.options].find(o=>o.textContent.includes('原生交易验收 / trade-"+lastTradeToken+"')).value;a.dispatchEvent(new Event('change',{bubbles:true}))");
             until(app,"document.querySelector('[data-testid=performance-net]').textContent==='8.00'");
             assertEquals("true",js(app,"document.body.innerText.includes('平均复盘评分')"));
             InstrumentationRegistry.getInstrumentation().getUiAutomation().waitForIdle(100,2000);
@@ -139,4 +142,51 @@ public class OfflineRuntimeTest {
             try(java.io.FileOutputStream output=new java.io.FileOutputStream(new java.io.File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(),"review-native-0.4.0.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}
         }
     }
+    @Test public void nativeWealthTransferLiabilitySnapshotAndFire() throws Exception {
+        String token=Long.toString(System.currentTimeMillis());
+        try(ActivityScenario<MainActivity> app=ActivityScenario.launch(MainActivity.class)) {
+            until(app,"document.body.innerText.includes('创建账户')");
+            for(String name:new String[]{"wealth-source-"+token,"wealth-target-"+token}) {
+                js(app,"document.querySelector('input[name=platform]').value='原生财富验收';document.querySelector('input[name=name]').value='"+name+"';document.querySelector('form').requestSubmit()");
+                until(app,"document.body.innerText.includes('"+name+"')");
+            }
+            js(app,"const a=document.querySelector('select[name=accountId]');a.value=[...a.options].find(o=>o.textContent.includes('wealth-source-"+token+"')).value;document.querySelector('input[name=amount]').value='10000';document.querySelector('input[name=at]').value='2025-01-01T08:00';document.querySelectorAll('form')[1].requestSubmit()");
+            until(app,"document.body.innerText.includes('流水与余额已一起保存。')");
+            js(app,"[...document.querySelectorAll('nav button')].find(b=>b.textContent==='划转').click()");
+            until(app,"document.body.innerText.includes('发起划转')");
+            js(app,"const a=document.querySelector('select[name=fromId]');a.value=[...a.options].find(o=>o.textContent.includes('wealth-source-"+token+"')).value;a.dispatchEvent(new Event('change',{bubbles:true}))");
+            until(app,"[...document.querySelector('select[name=toId]').options].some(o=>o.textContent.includes('wealth-target-"+token+"'))");
+            js(app,"const f=document.querySelector('form');const a=f.querySelector('select[name=toId]');a.value=[...a.options].find(o=>o.textContent.includes('wealth-target-"+token+"')).value;f.querySelector('input[name=quantity]').value='2000';f.querySelector('input[name=fee]').value='1';f.querySelector('input[name=at]').value='2025-01-02T08:00';f.requestSubmit()");
+            until(app,"document.body.innerText.includes('资产在途')");
+            js(app,"[...document.querySelectorAll('nav button')].find(b=>b.textContent==='财富').click()");
+            until(app,"document.querySelector('[data-testid=wealth-net]')!==null");
+            js(app,"window.__wealthTransit=document.querySelector('[data-testid=wealth-net]').textContent;[...document.querySelectorAll('main button')].find(b=>b.textContent==='负债').click()");
+            until(app,"document.body.innerText.includes('新增负债')");
+            js(app,"const f=document.querySelector('form');f.querySelector('input[name=name]').value='native-debt-"+token+"';f.querySelector('input[name=amount]').value='1000';f.requestSubmit()");
+            until(app,"document.body.innerText.includes('负债及余额历史已保存。')");
+            js(app,"[...document.querySelectorAll('main button')].find(b=>b.textContent==='总览').click()");
+            until(app,"document.querySelector('[data-testid=wealth-net]')!==null");
+            assertEquals("true",js(app,"Number(window.__wealthTransit)-Number(document.querySelector('[data-testid=wealth-net]').textContent)===1000"));
+            js(app,"window.__wealthDebt=document.querySelector('[data-testid=wealth-net]').textContent;[...document.querySelectorAll('main button')].find(b=>b.textContent==='快照').click()");
+            until(app,"document.body.innerText.includes('保存当前快照')");
+            js(app,"[...document.querySelectorAll('main button')].find(b=>b.textContent==='保存当前快照').click()");
+            until(app,"document.body.innerText.includes('完整财富快照已保存。')");
+            js(app,"[...document.querySelectorAll('nav button')].find(b=>b.textContent==='划转').click()");
+            until(app,"document.body.innerText.includes('确认到账')");
+            js(app,"const record=[...document.querySelectorAll('.transfer-record')].find(r=>r.textContent.includes('wealth-source-"+token+"'));record.querySelector('form').requestSubmit()");
+            until(app,"document.body.innerText.includes('目标账户已更新。')");
+            js(app,"[...document.querySelectorAll('nav button')].find(b=>b.textContent==='财富').click()");
+            until(app,"document.querySelector('[data-testid=wealth-net]')!==null");
+            assertEquals("true",js(app,"document.querySelector('[data-testid=wealth-net]').textContent===window.__wealthDebt"));
+            js(app,"[...document.querySelectorAll('nav button')].find(b=>b.textContent==='财务自由').click()");
+            until(app,"document.body.innerText.includes('保存财务目标')");
+            js(app,"document.querySelector('input[name=name]').value='native-fire-"+token+"';document.querySelector('form').requestSubmit()");
+            until(app,"document.body.innerText.includes('财务自由目标已保存。')");
+            assertEquals("true",js(app,"document.body.innerText.includes('基准情景所需每月投入')"));
+            InstrumentationRegistry.getInstrumentation().getUiAutomation().waitForIdle(100,2000);
+            android.graphics.Bitmap screenshot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+            try(java.io.FileOutputStream output=new java.io.FileOutputStream(new java.io.File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(),"wealth-native-0.6.0.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}
+        }
+    }
+
 }

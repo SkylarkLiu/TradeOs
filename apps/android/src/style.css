@@ -344,3 +344,12 @@ details {
   display: block;
   margin-block: 20px;
 }
+
+.report-currency {
+  max-width: 220px;
+  margin-block: 20px;
+}
+.transfer-record {
+  padding-block: 12px 24px;
+  border-bottom: 1px solid var(--line);
+}

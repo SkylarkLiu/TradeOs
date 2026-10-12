@@ -8,7 +8,8 @@
     "./validation": "./src/validation.ts",
     "./spot-ledger": "./src/spot-ledger.ts",
     "./trading": "./src/trading.ts",
-    "./review": "./src/review.ts"
+    "./review": "./src/review.ts",
+    "./fire": "./src/fire.ts"
   },
   "dependencies": {
     "decimal.js": "10.6.0",
