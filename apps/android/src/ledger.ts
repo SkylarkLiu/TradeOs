@@ -27,6 +27,15 @@ import {
   type AssetState,
   type Holding,
 } from "./assets";
+import {
+  TradingCommands,
+  readTrading,
+  tradingTables,
+  emptyTrading,
+  tradingStateSchema,
+  validateTrading,
+  type TradingState,
+} from "./trading";
 export const accountSchema = z.object({
   id,
   name: text,
@@ -48,7 +57,8 @@ export const entrySchema = z.object({
 });
 export type Account = z.infer<typeof accountSchema>;
 export type Entry = z.infer<typeof entrySchema>;
-export type State = { accounts: Account[]; entries: Entry[] } & AssetState;
+export type State = { accounts: Account[]; entries: Entry[] } & AssetState &
+  TradingState;
 const schema = [
   `CREATE TABLE IF NOT EXISTS FinancialAccount(id TEXT PRIMARY KEY,name TEXT NOT NULL,platform TEXT NOT NULL,currency TEXT NOT NULL,balance TEXT NOT NULL DEFAULT '0',sequence INTEGER NOT NULL DEFAULT 0,UNIQUE(platform,name,currency));`,
   `CREATE TABLE IF NOT EXISTS CashLedger(id TEXT PRIMARY KEY,accountId TEXT NOT NULL REFERENCES FinancialAccount(id) ON DELETE RESTRICT,type TEXT NOT NULL,amount TEXT NOT NULL,fee TEXT NOT NULL,delta TEXT NOT NULL,at TEXT NOT NULL,sequence INTEGER NOT NULL,note TEXT NOT NULL,UNIQUE(accountId,sequence));`,
@@ -110,6 +120,14 @@ export async function validateBackup(raw: unknown) {
         payload: basePayload.extend(assetStateSchema.shape),
         checksum: z.string().regex(/^[a-f0-9]{64}$/),
       }),
+      z.object({
+        kind: z.literal("tradeos-android-prototype"),
+        version: z.literal(3),
+        payload: basePayload
+          .extend(assetStateSchema.shape)
+          .extend(tradingStateSchema.shape),
+        checksum: z.string().regex(/^[a-f0-9]{64}$/),
+      }),
     ])
     .parse(raw);
   if (
@@ -117,7 +135,7 @@ export async function validateBackup(raw: unknown) {
     file.checksum
   )
     throw new Error("备份校验和不一致");
-  const payload = { ...emptyAssets(), ...file.payload };
+  const payload = { ...emptyAssets(), ...emptyTrading(), ...file.payload };
   const accountIds = new Set(payload.accounts.map((a) => a.id));
   const assetIds = new Set(payload.assets.map((a) => a.id));
   const accountKeys = new Set(
@@ -221,9 +239,10 @@ export async function validateBackup(raw: unknown) {
     )
   )
     throw new Error("备份报价关联或时间无效");
+  validateTrading(payload);
   return {
     kind: file.kind,
-    version: 2 as const,
+    version: 3 as const,
     payload,
     checksum: await digest(payload),
   };
@@ -231,7 +250,12 @@ export async function validateBackup(raw: unknown) {
 
 export class Ledger {
   private pending: Promise<unknown> = Promise.resolve();
-  constructor(private db: Sql) {}
+  private trading: TradingCommands;
+  constructor(private db: Sql) {
+    this.trading = new TradingCommands(db, (raw, reservation) =>
+      this.prepareAsset(raw, reservation),
+    );
+  }
   private serial<T>(work: () => Promise<T>): Promise<T> {
     const result = this.pending.then(work);
     this.pending = result.catch(() => undefined);
@@ -247,7 +271,7 @@ export class Ledger {
       },
     ]);
     const current = await this.db.query("SELECT version FROM OfflineSchema");
-    if (current.length > 1 || (current[0] && Number(current[0].version) > 2))
+    if (current.length > 1 || (current[0] && Number(current[0].version) > 3))
       throw new Error("账本由更新版本创建，请安装最新版本，数据未被修改。");
     if (!current[0] || Number(current[0].version) < 2)
       await this.db.batch([
@@ -258,9 +282,20 @@ export class Ledger {
           values: [],
         },
       ]);
+    if (!current[0] || Number(current[0].version) < 3)
+      await this.db.batch([
+        ...tradingTables.map((statement) => ({ statement, values: [] })),
+        { statement: "DELETE FROM OfflineSchema", values: [] },
+        {
+          statement: "INSERT INTO OfflineSchema(version) VALUES(3)",
+          values: [],
+        },
+      ]);
   }
+
   private async read(): Promise<State> {
     return {
+      ...(await readTrading(this.db)),
       assets: (await this.db.query("SELECT * FROM Asset ORDER BY code")).map(
         (a) => assetSchema.parse(a),
       ),
@@ -414,86 +449,130 @@ export class Ledger {
   }
   postAsset(raw: unknown) {
     return this.serial(async () => {
-      const input = transactionSchema
-        .omit({ externalId: true, purpose: true })
-        .parse(raw);
-      if (input.at > new Date()) throw new Error("不能记录未来时间");
-      const a = accountSchema.parse(
-        (
-          await this.db.query("SELECT * FROM FinancialAccount WHERE id=?", [
-            input.accountId,
-          ])
-        )[0],
-      );
-      const asset = assetSchema.parse(
-        (
-          await this.db.query("SELECT * FROM Asset WHERE id=?", [input.assetId])
-        )[0],
-      );
-      if (asset.currency !== a.currency)
-        throw new Error("资产结算币种与账户不一致，请选择同币种账户");
-      const previous = (
-        await this.db.query(
-          "SELECT at FROM (SELECT at,sequence FROM CashLedger WHERE accountId=? UNION ALL SELECT at,sequence FROM AssetLedger WHERE accountId=?) ORDER BY sequence DESC LIMIT 1",
-          [a.id, a.id],
-        )
-      )[0];
-      if (previous && input.at.toISOString() < String(previous.at))
-        throw new Error("流水不能早于上一笔记录");
-      const saved = (
-        await this.db.query(
-          "SELECT * FROM AssetHolding WHERE accountId=? AND assetId=?",
-          [a.id, asset.id],
-        )
-      )[0];
-      const old = saved
-        ? holdingSchema.parse(saved)
-        : {
-            accountId: a.id,
-            assetId: asset.id,
-            quantity: "0",
-            cost: "0",
-            realized: "0",
-          };
-      const changes = spotLedgerChanges(
-        { ...input, purpose: "LONG_TERM" },
-        false,
-        old,
-      );
-      const holding = updatedHolding(old, changes),
-        balance = D(a.balance).plus(changes.cashDelta);
-      if (balance.lt(0)) throw new Error("可用现金余额不足");
-      const entry = {
-        ...input,
-        id: crypto.randomUUID(),
-        at: input.at.toISOString(),
-        sequence: a.sequence + 1,
-        quantityDelta: changes.quantity,
-        cashDelta: changes.cashDelta,
-        costDelta: changes.costDelta,
-        realizedDelta: changes.realizedDelta,
-      };
-      await this.db.batch([
-        {
-          statement:
-            "INSERT INTO AssetHolding(accountId,assetId,quantity,cost,realized) VALUES(?,?,?,?,?) ON CONFLICT(accountId,assetId) DO UPDATE SET quantity=excluded.quantity,cost=excluded.cost,realized=excluded.realized",
-          values: [
-            holding.accountId,
-            holding.assetId,
-            holding.quantity,
-            holding.cost,
-            holding.realized,
-          ],
-        },
-        insertRow("AssetLedger", entry),
-        {
-          statement:
-            "UPDATE FinancialAccount SET balance=?,sequence=? WHERE id=?",
-          values: [canonical(balance), entry.sequence, a.id],
-        },
-      ]);
-      return entry;
+      const result = await this.prepareAsset(raw);
+      await this.db.batch(result.statements);
+      return result.entry;
     });
+  }
+  private async prepareAsset(
+    raw: unknown,
+    reservation?: { tradeId: string; quantity: string },
+  ) {
+    const input = transactionSchema
+      .omit({ externalId: true, purpose: true })
+      .parse(raw);
+    if (input.at > new Date()) throw new Error("不能记录未来时间");
+    const a = accountSchema.parse(
+      (
+        await this.db.query("SELECT * FROM FinancialAccount WHERE id=?", [
+          input.accountId,
+        ])
+      )[0],
+    );
+    const asset = assetSchema.parse(
+      (
+        await this.db.query("SELECT * FROM Asset WHERE id=?", [input.assetId])
+      )[0],
+    );
+    if (asset.currency !== a.currency)
+      throw new Error("资产结算币种与账户不一致，请选择同币种账户");
+    const previous = (
+      await this.db.query(
+        "SELECT at FROM (SELECT at,sequence FROM CashLedger WHERE accountId=? UNION ALL SELECT at,sequence FROM AssetLedger WHERE accountId=?) ORDER BY sequence DESC LIMIT 1",
+        [a.id, a.id],
+      )
+    )[0];
+    if (previous && input.at.toISOString() < String(previous.at))
+      throw new Error("流水不能早于上一笔记录");
+    const saved = (
+      await this.db.query(
+        "SELECT * FROM AssetHolding WHERE accountId=? AND assetId=?",
+        [a.id, asset.id],
+      )
+    )[0];
+    const old = saved
+      ? holdingSchema.parse(saved)
+      : {
+          accountId: a.id,
+          assetId: asset.id,
+          quantity: "0",
+          cost: "0",
+          realized: "0",
+        };
+    const changes = spotLedgerChanges(
+      { ...input, purpose: "LONG_TERM" },
+      false,
+      old,
+    );
+    const holding = updatedHolding(old, changes),
+      balance = D(a.balance).plus(changes.cashDelta);
+    if (balance.lt(0)) throw new Error("可用现金余额不足");
+    const entry = {
+      ...input,
+      id: crypto.randomUUID(),
+      at: input.at.toISOString(),
+      sequence: a.sequence + 1,
+      quantityDelta: changes.quantity,
+      cashDelta: changes.cashDelta,
+      costDelta: changes.costDelta,
+      realizedDelta: changes.realizedDelta,
+    };
+    const reservedRows = await this.db.query(
+      "SELECT id,quantity FROM Trade WHERE accountId=? AND assetId=? AND status='OPEN'",
+      [a.id, asset.id],
+    );
+    const reserved = reservedRows.reduce(
+      (total, t) =>
+        total.plus(
+          reservation && reservation.tradeId === t.id
+            ? reservation.quantity
+            : String(t.quantity),
+        ),
+      D(0),
+    );
+    if (D(holding.quantity).lt(reserved))
+      throw new Error("资产已被未平仓交易占用，请从交易日志减仓或平仓");
+    const statements: Statement[] = [
+      {
+        statement:
+          "INSERT INTO AssetHolding(accountId,assetId,quantity,cost,realized) VALUES(?,?,?,?,?) ON CONFLICT(accountId,assetId) DO UPDATE SET quantity=excluded.quantity,cost=excluded.cost,realized=excluded.realized",
+        values: [
+          holding.accountId,
+          holding.assetId,
+          holding.quantity,
+          holding.cost,
+          holding.realized,
+        ],
+      },
+      insertRow("AssetLedger", entry),
+      {
+        statement:
+          "UPDATE FinancialAccount SET balance=?,sequence=? WHERE id=?",
+        values: [canonical(balance), entry.sequence, a.id],
+      },
+    ];
+    return { entry, statements };
+  }
+  createStrategy(raw: unknown) {
+    return this.serial(() => this.trading.createStrategy(raw));
+  }
+  publishVersion(raw: unknown) {
+    return this.serial(() => this.trading.publishVersion(raw));
+  }
+  archiveStrategy(raw: unknown) {
+    return this.serial(() => this.trading.archiveStrategy(raw));
+  }
+  createPlan(raw: unknown) {
+    return this.serial(() => this.trading.createPlan(raw));
+  }
+  createTrade(raw: unknown) {
+    return this.serial(() => this.trading.createTrade(raw));
+  }
+  recordFill(raw: unknown) {
+    return this.serial(() => this.trading.recordFill(raw));
+  }
+  recordEvent(raw: unknown) {
+    return this.serial(() => this.trading.recordEvent(raw));
   }
   backup() {
     return this.serial(async () => {
@@ -501,7 +580,7 @@ export class Ledger {
       const payload = { createdAt: new Date().toISOString(), ...s };
       return {
         kind: "tradeos-android-prototype" as const,
-        version: 2 as const,
+        version: 3 as const,
         payload,
         checksum: await digest(payload),
       };
@@ -511,6 +590,14 @@ export class Ledger {
     return this.serial(async () => {
       const file = await validateBackup(raw);
       await this.db.batch([
+        ...[
+          "PositionEvent",
+          "TradeFill",
+          "Trade",
+          "TradingPlan",
+          "StrategyVersion",
+          "Strategy",
+        ].map((table) => ({ statement: `DELETE FROM ${table}`, values: [] })),
         { statement: "DELETE FROM AssetLedger", values: [] },
         { statement: "DELETE FROM AssetHolding", values: [] },
         { statement: "DELETE FROM AssetPrice", values: [] },
@@ -525,6 +612,12 @@ export class Ledger {
         ...file.payload.entries
           .sort((a, b) => a.sequence - b.sequence)
           .map(entryInsert),
+        ...file.payload.strategies.map((s) => insertRow("Strategy", s)),
+        ...file.payload.versions.map((s) => insertRow("StrategyVersion", s)),
+        ...file.payload.plans.map((s) => insertRow("TradingPlan", s)),
+        ...file.payload.trades.map((s) => insertRow("Trade", s)),
+        ...file.payload.fills.map((s) => insertRow("TradeFill", s)),
+        ...file.payload.events.map((s) => insertRow("PositionEvent", s)),
       ]);
     });
   }

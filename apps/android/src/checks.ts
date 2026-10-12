@@ -16,9 +16,18 @@ export async function runChecks() {
   try {
     await ledger.init();
     await db.batch([
-      ...["AssetLedger", "AssetHolding", "AssetPrice", "Asset"].map(
-        (table) => ({ statement: `DELETE FROM ${table}`, values: [] }),
-      ),
+      ...[
+        "PositionEvent",
+        "TradeFill",
+        "Trade",
+        "TradingPlan",
+        "StrategyVersion",
+        "Strategy",
+        "AssetLedger",
+        "AssetHolding",
+        "AssetPrice",
+        "Asset",
+      ].map((table) => ({ statement: `DELETE FROM ${table}`, values: [] })),
       { statement: "DELETE FROM CashLedger", values: [] },
       { statement: "DELETE FROM FinancialAccount", values: [] },
     ]);
@@ -157,6 +166,82 @@ export async function runChecks() {
         !upgraded.assetEntries.length &&
         !upgraded.assets.length,
       "旧版备份兼容升级",
+    );
+    const v = await ledger.createStrategy({
+      name: "隔离策略",
+      market: "现货",
+      timeframe: "日线",
+      environment: "验证环境",
+      rules:
+        "价格突破后入场，回落到止损价退出，到达目标后止盈，所有成交必须记录。",
+    });
+    await ledger.publishVersion({ id: v.id });
+    const tradedAsset = await ledger.createAsset({
+      code: "CHECKTRADE",
+      name: "隔离交易",
+      assetClass: "STOCK",
+      currency: "CNY",
+    });
+    const plan = await ledger.createPlan({
+      accountId: a.id,
+      assetId: tradedAsset.id,
+      strategyVersionId: v.id,
+      direction: "LONG",
+      entry: "10",
+      stop: "5",
+      target: "15",
+      equity: "1000",
+      riskPercent: "1",
+      reason: "隔离验证",
+      invalidation: "跌破止损",
+    });
+    const trade = await ledger.createTrade({
+      accountId: a.id,
+      assetId: tradedAsset.id,
+      planId: plan.id,
+      direction: "LONG",
+      openedAt: "2020-01-03T00:00:00Z",
+    });
+    await ledger.recordFill({
+      tradeId: trade.id,
+      action: "ENTRY",
+      quantity: "2",
+      price: "10",
+      fee: "1",
+      at: "2020-01-03T00:00:00Z",
+    });
+    let protectedHolding = false;
+    try {
+      await ledger.postAsset({
+        accountId: a.id,
+        assetId: tradedAsset.id,
+        type: "SELL",
+        quantity: "1",
+        price: "15",
+        at: "2020-01-04T00:00:00Z",
+      });
+    } catch {
+      protectedHolding = true;
+    }
+    check(
+      protectedHolding && (await ledger.state()).fills.length === 1,
+      "交易成交与占用持仓保护",
+    );
+    await ledger.recordFill({
+      tradeId: trade.id,
+      action: "EXIT",
+      quantity: "2",
+      price: "15",
+      fee: "1",
+      at: "2020-01-04T00:00:00Z",
+    });
+    await ledger.restore(await ledger.backup());
+    const closed = (await ledger.state()).trades[0];
+    check(
+      closed.status === "CLOSED" &&
+        closed.realized === "8" &&
+        closed.initialRisk === "10",
+      "策略交易备份重算恢复",
     );
     return checks;
   } finally {

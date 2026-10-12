@@ -31,7 +31,7 @@ public class OfflineRuntimeTest {
             until(app,"document.body.innerText.includes('运行离线检查')");
             js(app,"document.querySelector('section button').click()");
             until(app,"document.body.innerText.includes('离线能力检查通过。')");
-            assertEquals("9",js(app,"document.querySelectorAll('li').length"));
+            assertEquals("11",js(app,"document.querySelectorAll('li').length"));
         }
     }
     @Test public void privateBeforeRestoreFileRoundTrip() throws Exception {
@@ -80,8 +80,42 @@ public class OfflineRuntimeTest {
             assertEquals("true",js(app,"[...document.querySelectorAll('td')].some(e=>e.textContent==='120')"));
             InstrumentationRegistry.getInstrumentation().getUiAutomation().waitForIdle(100,2000);
             android.graphics.Bitmap screenshot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
-            try(java.io.FileOutputStream output=new java.io.FileOutputStream(new java.io.File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(),"asset-native-0.2.0.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}
+            try(java.io.FileOutputStream output=new java.io.FileOutputStream(new java.io.File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(),"asset-native-0.3.0.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}
 
+        }
+    }
+    @Test public void nativeStrategyAndTradeFills() throws Exception {
+        String token=Long.toString(System.currentTimeMillis());
+        try(ActivityScenario<MainActivity> app=ActivityScenario.launch(MainActivity.class)) {
+            until(app,"document.body.innerText.includes('创建账户')");
+            js(app,"document.querySelector('input[name=platform]').value='原生交易验收';document.querySelector('input[name=name]').value='trade-"+token+"';document.querySelector('form').requestSubmit()");
+            until(app,"document.body.innerText.includes('trade-"+token+"')");
+            js(app,"const a=document.querySelector('select[name=accountId]');a.value=[...a.options].find(o=>o.textContent.includes('trade-"+token+"')).value;document.querySelector('input[name=amount]').value='1000';document.querySelector('input[name=at]').value='2025-01-01T08:00';document.querySelectorAll('form')[1].requestSubmit()");
+            until(app,"document.body.innerText.includes('流水与余额已一起保存。')");
+            js(app,"[...document.querySelectorAll('nav button')].find(b=>b.textContent==='资产').click()");
+            until(app,"document.body.innerText.includes('创建资产')");
+            js(app,"document.querySelector('input[name=code]').value='TRADE-"+token+"';document.querySelector('input[name=name]').value='交易验收股票';document.querySelector('form').requestSubmit()");
+            until(app,"document.body.innerText.includes('资产已保存。')");
+            js(app,"[...document.querySelectorAll('nav button')].find(b=>b.textContent==='策略').click()");
+            until(app,"document.body.innerText.includes('保存策略草稿')");
+            js(app,"const f=document.querySelector('form');f.querySelector('input[name=name]').value='策略-"+token+"';f.querySelector('input[name=market]').value='股票现货';f.querySelector('input[name=timeframe]').value='日线';f.querySelector('input[name=environment]').value='上涨';f.querySelector('textarea').value='突破二十日高点入场，回落到止损价退出，到达目标后止盈，所有成交必须记录。';f.requestSubmit()");
+            until(app,"document.body.innerText.includes('策略草稿已保存')");
+            js(app,"const section=[...document.querySelectorAll('section')].find(s=>s.textContent.includes('策略-"+token+"'));section.querySelector('details').open=true;[...section.querySelectorAll('button')].find(b=>b.textContent==='发布 v1').click()");
+            until(app,"document.body.innerText.includes('策略版本已发布。')");
+            js(app,"[...document.querySelectorAll('nav button')].find(b=>b.textContent==='交易').click()");
+            until(app,"document.body.innerText.includes('建立交易')");
+            js(app,"const f=document.querySelector('form');const a=f.querySelector('select[name=accountId]');a.value=[...a.options].find(o=>o.textContent.includes('trade-"+token+"')).value;const asset=f.querySelector('select[name=assetId]');asset.value=[...asset.options].find(o=>o.textContent.includes('TRADE-"+token+"')).value;const strategy=f.querySelector('select[name=strategyVersionId]');strategy.value=[...strategy.options].find(o=>o.textContent.includes('策略-"+token+"')).value;f.querySelector('input[name=openedAt]').value='2025-01-02T08:00';f.requestSubmit()");
+            until(app,"document.body.innerText.includes('交易已建立')");
+            js(app,"const a=document.querySelector('select[aria-label=当前交易]');a.value=[...a.options].find(o=>o.textContent.includes('TRADE-"+token+"')).value;a.dispatchEvent(new Event('change',{bubbles:true}))");
+            until(app,"document.body.innerText.includes('实际成交价')");
+            js(app,"const f=document.querySelector('form[aria-label=成交表单]');f.querySelector('input[name=quantity]').value='2';f.querySelector('input[name=price]').value='10';f.querySelector('input[name=fee]').value='1';f.querySelector('input[name=at]').value='2025-01-02T08:00';f.requestSubmit()");
+            until(app,"document.body.innerText.includes('成交与交易、现金、持仓已一起保存。')");
+            js(app,"const f=document.querySelector('form[aria-label=成交表单]');f.querySelector('select').value='EXIT';f.querySelector('input[name=quantity]').value='2';f.querySelector('input[name=price]').value='15';f.querySelector('input[name=fee]').value='1';f.querySelector('input[name=at]').value='2025-01-03T08:00';f.requestSubmit()");
+            until(app,"document.body.innerText.includes('交易已平仓，成交和持仓事件保留，只读。')");
+            assertEquals("true",js(app,"[...document.querySelectorAll('td')].some(e=>e.textContent==='8')"));
+            InstrumentationRegistry.getInstrumentation().getUiAutomation().waitForIdle(100,2000);
+            android.graphics.Bitmap screenshot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+            try(java.io.FileOutputStream output=new java.io.FileOutputStream(new java.io.File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(),"trading-native-0.3.0.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}
         }
     }
 }

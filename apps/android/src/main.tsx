@@ -8,6 +8,8 @@ import { openSql } from "./sql";
 import { exportJson, importJson, saveBefore, readBefore } from "./files";
 import { runChecks } from "./checks";
 import "./style.css";
+import { TradingView, StrategyView } from "./trading-view";
+import { emptyTrading } from "./trading";
 import { emptyAssets } from "./assets";
 import { AssetsView } from "./assets-view";
 const localNow = () =>
@@ -36,6 +38,7 @@ function App() {
       accounts: [],
       entries: [],
       ...emptyAssets(),
+      ...emptyTrading(),
     }),
     [ready, setReady] = useState(false),
     [busy, setBusy] = useState(false),
@@ -106,20 +109,22 @@ function App() {
         </span>
       </header>
       <nav aria-label="工作台">
-        {["账本", "资产", "预测", "备份", "离线检查"].map((t) => (
-          <button
-            key={t}
-            aria-current={tab === t ? "page" : undefined}
-            onClick={() => setTab(t)}
-          >
-            {t}
-          </button>
-        ))}
+        {["账本", "资产", "策略", "交易", "预测", "备份", "离线检查"].map(
+          (t) => (
+            <button
+              key={t}
+              aria-current={tab === t ? "page" : undefined}
+              onClick={() => setTab(t)}
+            >
+              {t}
+            </button>
+          ),
+        )}
       </nav>
       <main>
         <p className="scope">
-          安卓离线资产版 0.2.0 ·
-          现金与现货持仓共用账本。策略交易、回测、复盘及电脑备份迁移仍在后续阶段。
+          安卓离线交易版 0.3.0 ·
+          策略、计划与现货成交接入本机账本。合约、回测、复盘及电脑备份迁移仍在后续阶段。
         </p>
         {error && (
           <p className="error" role="alert">
@@ -382,6 +387,24 @@ function App() {
                 notice={setNotice}
               />
             )}
+            {tab === "策略" && (
+              <StrategyView
+                state={state}
+                ledger={app}
+                busy={busy}
+                act={act}
+                notice={setNotice}
+              />
+            )}
+            {tab === "交易" && (
+              <TradingView
+                state={state}
+                ledger={app}
+                busy={busy}
+                act={act}
+                notice={setNotice}
+              />
+            )}
             {tab === "预测" && (
               <>
                 <h1>财富增长计算验证</h1>
@@ -551,7 +574,12 @@ function App() {
                         {pending.payload.entries.length} 条 · 资产{" "}
                         {pending.payload.assets.length} 项 · 资产流水{" "}
                         {pending.payload.assetEntries.length} 条 · 报价{" "}
-                        {pending.payload.prices.length} 条
+                        {pending.payload.prices.length} 条 · 策略{" "}
+                        {pending.payload.strategies.length} 项 · 交易{" "}
+                        {pending.payload.trades.length} 笔 · 成交{" "}
+                        {pending.payload.fills.length} 条 · 计划{" "}
+                        {pending.payload.plans.length} 项 · 持仓事件{" "}
+                        {pending.payload.events.length} 条
                       </p>
                       <label className="check">
                         <input

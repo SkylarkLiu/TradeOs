@@ -72,7 +72,7 @@ export const assetTables = [
 ];
 export function insertRow(
   table: string,
-  row: Record<string, string | number>,
+  row: Record<string, string | number | null>,
 ): Statement {
   const keys = Object.keys(row);
   return {

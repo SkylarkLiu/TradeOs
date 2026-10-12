@@ -1,25 +1,8 @@
 import { describe, it, expect } from "vitest";
-import Database from "better-sqlite3";
-import { Ledger, digest } from "../src/ledger";
-import type { Sql } from "../src/sql";
+import { digest } from "../src/ledger";
 import { D, projectWealth } from "@tradeos/core";
 import { portfolioGroups } from "../src/assets";
-function setup() {
-  const db = new Database(":memory:");
-  db.pragma("foreign_keys = ON");
-  const sql: Sql = {
-    query: async (s, p = []) =>
-      db.prepare(s).all(...p) as Record<string, unknown>[],
-    batch: async (set) =>
-      db.transaction(() => {
-        for (const s of set) db.prepare(s.statement).run(...s.values);
-      })(),
-    close: async () => {
-      db.close();
-    },
-  };
-  return { ledger: new Ledger(sql), sql };
-}
+import { setup } from "./sql";
 describe("安卓独立账本业务", () => {
   it("高精度存入取出和费用一致，余额不足整笔拒绝", async () => {
     const { ledger } = setup();

@@ -1,21 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/repositories/db";
-import {
-  D,
-  canonical,
-  contractPnl,
-  positionSize,
-} from "@/lib/calculations/decimal";
-import {
-  id,
-  text,
-  date,
-  positive,
-  nonnegative,
-  direction,
-  optionalId,
-  tags,
-} from "@/lib/validation/common";
+import { D, canonical, positionSize } from "@/lib/calculations/decimal";
+import { id, text, date, positive, optionalId } from "@/lib/validation/common";
 import {
   audit,
   nextLedgerSequence,
@@ -25,12 +11,13 @@ import {
   chronology,
   type Tx,
 } from "./wealth";
-const rulesSchema = z.object({
-  market: text,
-  timeframe: text,
-  environment: text,
-  rules: z.string().min(20).max(50000),
-});
+import {
+  rulesSchema,
+  planSchema,
+  tradeSchema,
+  fillSchema,
+  fillChanges,
+} from "../../packages/core/src/trading";
 async function published(tx: Tx, versionId: string) {
   const v = await tx.strategyVersion.findUniqueOrThrow({
     where: { id: versionId },
@@ -40,35 +27,6 @@ async function published(tx: Tx, versionId: string) {
     throw new Error("请选择活跃策略的已发布版本");
   return v;
 }
-const planSchema = z.object({
-  accountId: id,
-  assetId: id,
-  strategyVersionId: optionalId,
-  direction,
-  entry: positive,
-  stop: positive,
-  target: positive,
-  equity: positive,
-  riskPercent: positive,
-  reason: text,
-  invalidation: text,
-});
-const tradeSchema = z.object({
-  accountId: id,
-  assetId: id,
-  strategyVersionId: optionalId,
-  planId: optionalId,
-  direction,
-  initialRisk: nonnegative.default("0"),
-  leverage: positive.default("1"),
-  stop: positive.optional(),
-  target: positive.optional(),
-  reason: z.string().max(3000).default(""),
-  emotion: z.string().max(1000).default(""),
-  tags: tags.default([]),
-  environment: z.string().max(300).default(""),
-  openedAt: date,
-});
 export async function tradingCommand(action: string, raw: unknown) {
   switch (action) {
     case "strategy.create": {
@@ -325,17 +283,7 @@ export async function tradingCommand(action: string, raw: unknown) {
   }
 }
 export async function recordFill(raw: unknown) {
-  const input = z
-    .object({
-      tradeId: id,
-      action: z.enum(["ENTRY", "EXIT"]),
-      quantity: positive,
-      price: positive,
-      fee: nonnegative.default("0"),
-      slippage: nonnegative.default("0"),
-      at: date,
-    })
-    .parse(raw);
+  const input = fillSchema.parse(raw);
   return db.$transaction(async (tx) => {
     const trade = await tx.trade.findUniqueOrThrow({
       where: { id: input.tradeId },
@@ -355,47 +303,11 @@ export async function recordFill(raw: unknown) {
       throw new Error("成交时间不能早于上一次持仓事件");
     const oldQ = D(trade.quantity),
       q = D(input.quantity),
-      price = D(input.price),
-      fee = D(input.fee),
       entry = input.action === "ENTRY";
-    if (!entry && q.gt(oldQ)) throw new Error("平仓数量超过持仓");
-    const nextQ = entry ? oldQ.plus(q) : oldQ.minus(q);
-    let avg = D(trade.averageEntry);
-    if (entry) {
-      avg =
-        trade.asset.instrument === "INVERSE" && oldQ.gt(0)
-          ? nextQ.div(oldQ.div(avg).plus(q.div(price)))
-          : oldQ.mul(avg).plus(q.mul(price)).div(nextQ);
-    }
-    const realized = entry
-        ? fee.neg()
-        : contractPnl(
-            trade.asset.instrument,
-            trade.direction,
-            input.quantity,
-            trade.averageEntry,
-            input.price,
-            trade.asset.multiplier,
-          ).minus(fee),
-      closed = !entry && nextQ.eq(0);
-    let margin = D(0);
-    if (trade.asset.instrument !== "SPOT" && nextQ.gt(0))
-      margin = nextQ
-        .mul(trade.asset.multiplier)
-        .mul(trade.asset.instrument === "INVERSE" ? D(1).div(avg) : avg)
-        .div(trade.leverage);
-    await tx.trade.update({
-      where: { id: trade.id },
-      data: {
-        quantity: canonical(nextQ),
-        averageEntry: canonical(avg),
-        realized: canonical(D(trade.realized).plus(realized)),
-        fees: canonical(D(trade.fees).plus(fee)),
-        margin: canonical(margin),
-        status: closed ? "CLOSED" : "OPEN",
-        closedAt: closed ? input.at : null,
-      },
-    });
+    const { pnl, ...data } = fillChanges(trade, input, trade.asset);
+    const realized = D(pnl),
+      closed = data.status === "CLOSED";
+    await tx.trade.update({ where: { id: trade.id }, data });
     let transaction;
     if (trade.asset.instrument === "SPOT") {
       transaction = await postLedger(tx, {

@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/decimal.ts",
     "./validation": "./src/validation.ts",
-    "./spot-ledger": "./src/spot-ledger.ts"
+    "./spot-ledger": "./src/spot-ledger.ts",
+    "./trading": "./src/trading.ts"
   },
   "dependencies": {
     "decimal.js": "10.6.0",

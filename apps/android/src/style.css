@@ -306,3 +306,34 @@ footer {
     transition: filter 0.12s ease;
   }
 }
+
+textarea {
+  font: inherit;
+  width: 100%;
+  color: inherit;
+  background: #11171e;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 140px;
+  caret-color: var(--accent);
+}
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+summary {
+  cursor: pointer;
+  min-height: 48px;
+  padding: 12px 0;
+}
+details {
+  margin-block: 16px;
+}
+.rules {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
