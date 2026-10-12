@@ -215,7 +215,7 @@ export class TradingCommands {
     if (a.currency !== asset.currency)
       throw new Error("账户与资产结算币种不一致");
   }
-  async createStrategy(raw: unknown) {
+  async prepareStrategy(raw: unknown) {
     const { name, ...rules } = rulesSchema.extend({ name: text }).parse(raw);
     const saved = (
       await this.db.query("SELECT * FROM Strategy WHERE name=?", [name])
@@ -243,12 +243,20 @@ export class TradingCommands {
       createdAt: new Date().toISOString(),
       ...rules,
     };
-    await this.db.batch([
-      ...(saved ? [] : [insertRow("Strategy", strategy)]),
-      insertRow("StrategyVersion", version),
-    ]);
-    return version;
+    return {
+      version,
+      statements: [
+        ...(saved ? [] : [insertRow("Strategy", strategy)]),
+        insertRow("StrategyVersion", version),
+      ],
+    };
   }
+  async createStrategy(raw: unknown) {
+    const prepared = await this.prepareStrategy(raw);
+    await this.db.batch(prepared.statements);
+    return prepared.version;
+  }
+
   async publishVersion(raw: unknown) {
     const input = z.object({ id }).parse(raw);
     const v = versionSchema.parse(

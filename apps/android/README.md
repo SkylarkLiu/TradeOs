@@ -12,7 +12,7 @@ npm ci --prefix apps/android
 npm run apk --prefix apps/android
 ```
 
-生成根目录 `artifacts/android/TradeOS-offline-prototype-0.3.0.apk` 及校验文件。源码依赖由独立package-lock锁定；生成的网页资源由Capacitor同步，不提交到Git。
+生成根目录 `artifacts/android/TradeOS-offline-prototype-0.4.0.apk` 及校验文件。源码依赖由独立package-lock锁定；生成的网页资源由Capacitor同步，不提交到Git。
 
 ## 检查
 
@@ -30,3 +30,6 @@ npm run test:e2e --prefix apps/android
 
 
 0.3.0增加策略、版本、风险计划、现货交易、成交和持仓事件。共用的策略/计划/成交输入及成交变更计算位于 `packages/core/src/trading.ts`，原生业务在 `src/trading.ts`。持仓预留检查由资产和交易写入口共用；交易成交的流水、余额、持仓、汇总和事件一次批量事务提交。备份version3可读v1/v2，恢复前会重算成交与交易汇总，并核对每笔成交对应的资产流水及持仓占用。
+
+
+0.4.0增加 `src/review.ts` 和 `src/review-view.tsx`，评分定义与验证在 `packages/core/src/review.ts` 共用。复盘带规则快照及全局递增sequence，最新单笔复盘判定纪律，历次标签保留。复盘生成策略草稿时调用无写入的 `TradingCommands.prepareStrategy`，将版本和ReviewImprovement关联一次事务提交；原交易和已发布版本不变。Schema/备份4可读旧v1/v2/v3，恢复校验复盘、规则、已平仓交易及版本关联。

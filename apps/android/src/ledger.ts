@@ -36,6 +36,16 @@ import {
   validateTrading,
   type TradingState,
 } from "./trading";
+import {
+  ReviewCommands,
+  readReviews,
+  reviewTables,
+  emptyReviews,
+  reviewStateSchema,
+  validateReviews,
+  scoreSettingsInsert,
+  type ReviewState,
+} from "./review";
 export const accountSchema = z.object({
   id,
   name: text,
@@ -58,7 +68,8 @@ export const entrySchema = z.object({
 export type Account = z.infer<typeof accountSchema>;
 export type Entry = z.infer<typeof entrySchema>;
 export type State = { accounts: Account[]; entries: Entry[] } & AssetState &
-  TradingState;
+  TradingState &
+  ReviewState;
 const schema = [
   `CREATE TABLE IF NOT EXISTS FinancialAccount(id TEXT PRIMARY KEY,name TEXT NOT NULL,platform TEXT NOT NULL,currency TEXT NOT NULL,balance TEXT NOT NULL DEFAULT '0',sequence INTEGER NOT NULL DEFAULT 0,UNIQUE(platform,name,currency));`,
   `CREATE TABLE IF NOT EXISTS CashLedger(id TEXT PRIMARY KEY,accountId TEXT NOT NULL REFERENCES FinancialAccount(id) ON DELETE RESTRICT,type TEXT NOT NULL,amount TEXT NOT NULL,fee TEXT NOT NULL,delta TEXT NOT NULL,at TEXT NOT NULL,sequence INTEGER NOT NULL,note TEXT NOT NULL,UNIQUE(accountId,sequence));`,
@@ -128,6 +139,15 @@ export async function validateBackup(raw: unknown) {
           .extend(tradingStateSchema.shape),
         checksum: z.string().regex(/^[a-f0-9]{64}$/),
       }),
+      z.object({
+        kind: z.literal("tradeos-android-prototype"),
+        version: z.literal(4),
+        payload: basePayload
+          .extend(assetStateSchema.shape)
+          .extend(tradingStateSchema.shape)
+          .extend(reviewStateSchema.shape),
+        checksum: z.string().regex(/^[a-f0-9]{64}$/),
+      }),
     ])
     .parse(raw);
   if (
@@ -135,7 +155,12 @@ export async function validateBackup(raw: unknown) {
     file.checksum
   )
     throw new Error("备份校验和不一致");
-  const payload = { ...emptyAssets(), ...emptyTrading(), ...file.payload };
+  const payload = {
+    ...emptyAssets(),
+    ...emptyTrading(),
+    ...emptyReviews(),
+    ...file.payload,
+  };
   const accountIds = new Set(payload.accounts.map((a) => a.id));
   const assetIds = new Set(payload.assets.map((a) => a.id));
   const accountKeys = new Set(
@@ -240,9 +265,10 @@ export async function validateBackup(raw: unknown) {
   )
     throw new Error("备份报价关联或时间无效");
   validateTrading(payload);
+  validateReviews(payload);
   return {
     kind: file.kind,
-    version: 3 as const,
+    version: 4 as const,
     payload,
     checksum: await digest(payload),
   };
@@ -251,10 +277,12 @@ export async function validateBackup(raw: unknown) {
 export class Ledger {
   private pending: Promise<unknown> = Promise.resolve();
   private trading: TradingCommands;
+  private review: ReviewCommands;
   constructor(private db: Sql) {
     this.trading = new TradingCommands(db, (raw, reservation) =>
       this.prepareAsset(raw, reservation),
     );
+    this.review = new ReviewCommands(db, this.trading);
   }
   private serial<T>(work: () => Promise<T>): Promise<T> {
     const result = this.pending.then(work);
@@ -271,7 +299,7 @@ export class Ledger {
       },
     ]);
     const current = await this.db.query("SELECT version FROM OfflineSchema");
-    if (current.length > 1 || (current[0] && Number(current[0].version) > 3))
+    if (current.length > 1 || (current[0] && Number(current[0].version) > 4))
       throw new Error("账本由更新版本创建，请安装最新版本，数据未被修改。");
     if (!current[0] || Number(current[0].version) < 2)
       await this.db.batch([
@@ -291,11 +319,21 @@ export class Ledger {
           values: [],
         },
       ]);
+    if (!current[0] || Number(current[0].version) < 4)
+      await this.db.batch([
+        ...reviewTables.map((statement) => ({ statement, values: [] })),
+        { statement: "DELETE FROM OfflineSchema", values: [] },
+        {
+          statement: "INSERT INTO OfflineSchema(version) VALUES(4)",
+          values: [],
+        },
+      ]);
   }
 
   private async read(): Promise<State> {
     return {
       ...(await readTrading(this.db)),
+      ...(await readReviews(this.db)),
       assets: (await this.db.query("SELECT * FROM Asset ORDER BY code")).map(
         (a) => assetSchema.parse(a),
       ),
@@ -574,13 +612,22 @@ export class Ledger {
   recordEvent(raw: unknown) {
     return this.serial(() => this.trading.recordEvent(raw));
   }
+  saveReview(raw: unknown) {
+    return this.serial(() => this.review.saveReview(raw));
+  }
+  setScoreRules(raw: unknown) {
+    return this.serial(() => this.review.setRules(raw));
+  }
+  improveStrategy(raw: unknown) {
+    return this.serial(() => this.review.improveStrategy(raw));
+  }
   backup() {
     return this.serial(async () => {
       const s = await this.read();
       const payload = { createdAt: new Date().toISOString(), ...s };
       return {
         kind: "tradeos-android-prototype" as const,
-        version: 3 as const,
+        version: 4 as const,
         payload,
         checksum: await digest(payload),
       };
@@ -591,6 +638,9 @@ export class Ledger {
       const file = await validateBackup(raw);
       await this.db.batch([
         ...[
+          "ReviewImprovement",
+          "TradeReview",
+          "ReviewSettings",
           "PositionEvent",
           "TradeFill",
           "Trade",
@@ -618,6 +668,11 @@ export class Ledger {
         ...file.payload.trades.map((s) => insertRow("Trade", s)),
         ...file.payload.fills.map((s) => insertRow("TradeFill", s)),
         ...file.payload.events.map((s) => insertRow("PositionEvent", s)),
+        ...file.payload.reviews.map((s) => insertRow("TradeReview", s)),
+        ...file.payload.improvements.map((s) =>
+          insertRow("ReviewImprovement", s),
+        ),
+        scoreSettingsInsert(file.payload.scoreRules),
       ]);
     });
   }

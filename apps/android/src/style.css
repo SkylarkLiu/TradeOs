@@ -337,3 +337,10 @@ details {
   overflow-wrap: anywhere;
   font: inherit;
 }
+
+.pnl-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-block: 20px;
+}

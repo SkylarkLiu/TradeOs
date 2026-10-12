@@ -31,7 +31,7 @@ public class OfflineRuntimeTest {
             until(app,"document.body.innerText.includes('运行离线检查')");
             js(app,"document.querySelector('section button').click()");
             until(app,"document.body.innerText.includes('离线能力检查通过。')");
-            assertEquals("11",js(app,"document.querySelectorAll('li').length"));
+            assertEquals("13",js(app,"document.querySelectorAll('li').length"));
         }
     }
     @Test public void privateBeforeRestoreFileRoundTrip() throws Exception {
@@ -80,7 +80,7 @@ public class OfflineRuntimeTest {
             assertEquals("true",js(app,"[...document.querySelectorAll('td')].some(e=>e.textContent==='120')"));
             InstrumentationRegistry.getInstrumentation().getUiAutomation().waitForIdle(100,2000);
             android.graphics.Bitmap screenshot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
-            try(java.io.FileOutputStream output=new java.io.FileOutputStream(new java.io.File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(),"asset-native-0.3.0.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}
+            try(java.io.FileOutputStream output=new java.io.FileOutputStream(new java.io.File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(),"asset-native-0.4.0.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}
 
         }
     }
@@ -115,7 +115,28 @@ public class OfflineRuntimeTest {
             assertEquals("true",js(app,"[...document.querySelectorAll('td')].some(e=>e.textContent==='8')"));
             InstrumentationRegistry.getInstrumentation().getUiAutomation().waitForIdle(100,2000);
             android.graphics.Bitmap screenshot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
-            try(java.io.FileOutputStream output=new java.io.FileOutputStream(new java.io.File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(),"trading-native-0.3.0.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}
+            try(java.io.FileOutputStream output=new java.io.FileOutputStream(new java.io.File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(),"trading-native-0.4.0.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}
+        }
+    }
+    @Test public void nativeReviewPerformanceAndImprovement() throws Exception {
+        nativeStrategyAndTradeFills();
+        try(ActivityScenario<MainActivity> app=ActivityScenario.launch(MainActivity.class)) {
+            until(app,"document.body.innerText.includes('创建账户')");
+            js(app,"[...document.querySelectorAll('nav button')].find(b=>b.textContent==='复盘').click()");
+            until(app,"document.body.innerText.includes('保存一次复盘')");
+            js(app,"const f=document.querySelector('form[aria-label=复盘表单]');const a=f.querySelector('select[name=tradeId]');a.value=[...a.options].findLast(o=>o.textContent.includes('TRADE-')).value;f.querySelector('input[name=at]').value='2025-02-01T08:00';[...f.querySelectorAll('input[type=number]')].forEach(i=>i.value='4');f.querySelector('input[name=tags]').value='按计划执行';f.querySelector('textarea[name=content]').value='本次按计划完成交易，下一次入场前再次核对风险预算与止损。';f.querySelector('textarea[name=lessons]').value='先核对风险';f.querySelector('textarea[name=nextAction]').value='入场前确认仓位和止损';f.requestSubmit()");
+            until(app,"document.body.innerText.includes('复盘已保存')");
+            js(app,"const history=[...document.querySelectorAll('section')].find(s=>s.textContent.includes('复盘历史'));history.querySelector('details').open=true;const detail=[...history.querySelectorAll('details')].find(d=>d.querySelector('summary')?.textContent==='根据本次复盘生成策略改进草稿');detail.open=true;const f=detail.querySelector('form');f.querySelector('textarea').value+='新增入场前逐项复核风险预算和止损。';f.requestSubmit()");
+            until(app,"document.body.innerText.includes('改进草稿已生成')");
+            assertEquals("true",js(app,"document.body.innerText.includes('已生成改进版本 v2')"));
+            js(app,"[...document.querySelectorAll('nav button')].find(b=>b.textContent==='绩效').click()");
+            until(app,"document.body.innerText.includes('结果与纪律')");
+            js(app,"const a=document.querySelector('select[aria-label=绩效账户]');a.value=[...a.options].findLast(o=>o.textContent.includes('原生交易验收 / trade-')).value;a.dispatchEvent(new Event('change',{bubbles:true}))");
+            until(app,"document.querySelector('[data-testid=performance-net]').textContent==='8.00'");
+            assertEquals("true",js(app,"document.body.innerText.includes('平均复盘评分')"));
+            InstrumentationRegistry.getInstrumentation().getUiAutomation().waitForIdle(100,2000);
+            android.graphics.Bitmap screenshot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+            try(java.io.FileOutputStream output=new java.io.FileOutputStream(new java.io.File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(),"review-native-0.4.0.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}
         }
     }
 }

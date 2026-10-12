@@ -25,7 +25,7 @@ test("本机浏览器存储重载、离线校验及JSON导出", async ({ page })
   await page.getByRole("button", { name: "离线检查", exact: true }).click();
   await page.getByRole("button", { name: "运行离线检查", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("离线能力检查通过。");
-  await expect(page.locator("li")).toHaveCount(11);
+  await expect(page.locator("li")).toHaveCount(13);
   await page.getByRole("button", { name: "备份", exact: true }).click();
   const waiting = page.waitForEvent("download");
   await page.getByRole("button", { name: "导出完整JSON", exact: true }).click();
@@ -182,11 +182,9 @@ test("策略发布、风险计划、分批成交及备份预览完整流程", as
   await create
     .getByLabel("交易标的", { exact: true })
     .selectOption({ label: "TRADE / 交易股票 · CNY" });
-  await create
-    .getByLabel("关联计划", { exact: true })
-    .selectOption({
-      label: "TRADE / 交易股票 · 交易验收 / 交易账户 · CNY · 突破确认",
-    });
+  await create.getByLabel("关联计划", { exact: true }).selectOption({
+    label: "TRADE / 交易股票 · 交易验收 / 交易账户 · CNY · 突破确认",
+  });
   await create
     .getByLabel("交易开始时间", { exact: true })
     .fill("2025-01-02T08:00");
@@ -266,4 +264,75 @@ test("策略发布、风险计划、分批成交及备份预览完整流程", as
   await expect(
     page.getByText(/策略 1 项 · 交易 1 笔 · 成交 2 条/),
   ).toBeVisible();
+  await page.getByRole("button", { name: "复盘", exact: true }).click();
+  const review = page.getByRole("form", { name: "复盘表单", exact: true });
+  const trades = await review
+    .getByLabel("复盘交易", { exact: true })
+    .locator("option")
+    .allTextContents();
+  await review
+    .getByLabel("复盘交易", { exact: true })
+    .selectOption({ label: trades[1] });
+  await review.getByLabel("复盘时间", { exact: true }).fill("2025-02-01T08:00");
+  for (const name of [
+    "策略符合度",
+    "风险控制",
+    "执行纪律",
+    "交易心理",
+    "复盘完整度",
+  ])
+    await review.getByLabel("评分：" + name, { exact: true }).fill("4");
+  await review
+    .getByLabel("复盘标签", { exact: true })
+    .fill("按计划执行，风险复核");
+  await review
+    .getByLabel("复盘内容", { exact: true })
+    .fill("本次按计划完成交易，下一次入场前需要再次复核风险预算与止损。");
+  await review.getByLabel("经验教训", { exact: true }).fill("先核对风险预算");
+  await review
+    .getByLabel("下一次执行动作", { exact: true })
+    .fill("入场前逐项确认止损和仓位");
+  await page.getByRole("button", { name: "保存复盘", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("复盘已保存");
+  await page.getByText(/评分 80.0 \/ 100 · 纪律达标/).click();
+  await page.getByText("根据本次复盘生成策略改进草稿", { exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "改进规则", exact: true })
+    .fill(
+      "突破最近二十日高点入场，回落至止损位置退出，达到目标分批止盈。新增入场前逐项复核风险预算。",
+    );
+  await page.getByRole("button", { name: "生成改进草稿", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("改进草稿已生成");
+  await expect(page.getByText(/已生成改进版本 v2/)).toBeVisible();
+  await page.getByRole("button", { name: "绩效", exact: true }).click();
+  await expect(page.getByTestId("performance-net")).toHaveText("8.00");
+  await expect(page.getByRole("img", { name: /累计净损益曲线/ })).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.screenshot({
+    path: "../../artifacts/android/performance-tablet-0.4.0.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: "../../artifacts/android/performance-mobile-0.4.0.png",
+    fullPage: true,
+  });
+  expect(
+    await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth <=
+        document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
+  await page.getByLabel("绩效标签", { exact: true }).fill("不存在");
+  await expect(
+    page.getByText("当前筛选没有已平仓交易。", { exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("绩效标签", { exact: true }).fill("按计划执行");
+  await expect(page.getByTestId("performance-net")).toHaveText("8.00");
+  await page.reload();
+  await page.getByRole("button", { name: "复盘", exact: true }).click();
+  await expect(page.getByText(/评分 80.0 \/ 100 · 纪律达标/)).toBeVisible();
+  await page.getByRole("button", { name: "策略", exact: true }).click();
+  await expect(page.getByText("v2 · 草稿", { exact: false })).toBeVisible();
 });

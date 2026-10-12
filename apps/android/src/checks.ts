@@ -17,6 +17,9 @@ export async function runChecks() {
     await ledger.init();
     await db.batch([
       ...[
+        "ReviewImprovement",
+        "TradeReview",
+        "ReviewSettings",
         "PositionEvent",
         "TradeFill",
         "Trade",
@@ -242,6 +245,33 @@ export async function runChecks() {
         closed.realized === "8" &&
         closed.initialRisk === "10",
       "策略交易备份重算恢复",
+    );
+    const grade = await ledger.saveReview({
+      tradeId: trade.id,
+      period: "TRADE",
+      at: "2020-01-05T00:00:00Z",
+      scores: Object.fromEntries(
+        (await ledger.state()).scoreRules.map((r) => [r.name, r.max]),
+      ),
+      tags: ["隔离"],
+      content: "本次按计划完成交易，下一次入场前再次检查风险和止损。",
+      lessons: "核对风险",
+      nextAction: "入场前复核止损与仓位",
+    });
+    check((await ledger.state()).reviews.length === 1, "复盘及评分快照保存");
+    await ledger.improveStrategy({
+      reviewId: grade.id,
+      market: "现货",
+      timeframe: "日线",
+      environment: "验证环境",
+      rules:
+        "价格突破后入场，回落到止损价退出，到达目标后止盈，新增入场前复核风险预算。",
+    });
+    await ledger.restore(await ledger.backup());
+    check(
+      (await ledger.state()).improvements.length === 1 &&
+        (await ledger.state()).versions.length === 2,
+      "策略改进及完整备份恢复",
     );
     return checks;
   } finally {

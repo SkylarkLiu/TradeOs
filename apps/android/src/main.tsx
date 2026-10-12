@@ -9,6 +9,8 @@ import { exportJson, importJson, saveBefore, readBefore } from "./files";
 import { runChecks } from "./checks";
 import "./style.css";
 import { TradingView, StrategyView } from "./trading-view";
+import { ReviewView, PerformanceView } from "./review-view";
+import { emptyReviews } from "./review";
 import { emptyTrading } from "./trading";
 import { emptyAssets } from "./assets";
 import { AssetsView } from "./assets-view";
@@ -39,6 +41,7 @@ function App() {
       entries: [],
       ...emptyAssets(),
       ...emptyTrading(),
+      ...emptyReviews(),
     }),
     [ready, setReady] = useState(false),
     [busy, setBusy] = useState(false),
@@ -109,22 +112,30 @@ function App() {
         </span>
       </header>
       <nav aria-label="工作台">
-        {["账本", "资产", "策略", "交易", "预测", "备份", "离线检查"].map(
-          (t) => (
-            <button
-              key={t}
-              aria-current={tab === t ? "page" : undefined}
-              onClick={() => setTab(t)}
-            >
-              {t}
-            </button>
-          ),
-        )}
+        {[
+          "账本",
+          "资产",
+          "策略",
+          "交易",
+          "复盘",
+          "绩效",
+          "预测",
+          "备份",
+          "离线检查",
+        ].map((t) => (
+          <button
+            key={t}
+            aria-current={tab === t ? "page" : undefined}
+            onClick={() => setTab(t)}
+          >
+            {t}
+          </button>
+        ))}
       </nav>
       <main>
         <p className="scope">
-          安卓离线交易版 0.3.0 ·
-          策略、计划与现货成交接入本机账本。合约、回测、复盘及电脑备份迁移仍在后续阶段。
+          安卓离线复盘版 0.4.0 ·
+          计划、成交、复盘和策略改进已接入本机账本。合约、回测及电脑备份迁移仍在后续阶段。
         </p>
         {error && (
           <p className="error" role="alert">
@@ -405,6 +416,24 @@ function App() {
                 notice={setNotice}
               />
             )}
+            {tab === "复盘" && (
+              <ReviewView
+                state={state}
+                ledger={app}
+                busy={busy}
+                act={act}
+                notice={setNotice}
+              />
+            )}
+            {tab === "绩效" && (
+              <PerformanceView
+                state={state}
+                ledger={app}
+                busy={busy}
+                act={act}
+                notice={setNotice}
+              />
+            )}
             {tab === "预测" && (
               <>
                 <h1>财富增长计算验证</h1>
@@ -579,7 +608,9 @@ function App() {
                         {pending.payload.trades.length} 笔 · 成交{" "}
                         {pending.payload.fills.length} 条 · 计划{" "}
                         {pending.payload.plans.length} 项 · 持仓事件{" "}
-                        {pending.payload.events.length} 条
+                        {pending.payload.events.length} 条 · 复盘{" "}
+                        {pending.payload.reviews.length} 条 · 策略改进{" "}
+                        {pending.payload.improvements.length} 项
                       </p>
                       <label className="check">
                         <input

@@ -11,29 +11,12 @@ import {
   twr,
   xirr,
 } from "@/lib/calculations/decimal";
-import { id, text, date, tags } from "@/lib/validation/common";
+import { id, date, tags } from "@/lib/validation/common";
 import { audit, fxAt } from "./wealth";
 import { defaultScoreRules } from "@/lib/review-rules";
 export { defaultScoreRules };
-export const scoreRulesSchema = z
-  .array(
-    z.object({
-      name: text,
-      max: z.number().int().min(1).max(100),
-      weight: z.number().min(0).max(100),
-      compliance: z.boolean(),
-      threshold: z.number().min(0).max(100),
-    }),
-  )
-  .min(1)
-  .max(20)
-  .refine(
-    (r) =>
-      new Set(r.map((x) => x.name)).size === r.length &&
-      r.some((x) => x.weight > 0) &&
-      r.every((x) => x.threshold <= x.max),
-    "评分名称不能重复，至少一个权重大于零，门槛不能超过满分",
-  );
+import { scoreRulesSchema } from "../../packages/core/src/review";
+export { scoreRulesSchema };
 export async function reviewCommand(action: string, raw: unknown) {
   if (action === "review.rules") {
     const input = scoreRulesSchema.parse(raw);
