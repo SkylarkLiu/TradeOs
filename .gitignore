@@ -3,6 +3,8 @@ node_modules/
 generated/
 data/
 .env
+.env.*
+!.env.example
 *.tsbuildinfo
 playwright-report/
 test-results/
@@ -12,6 +14,7 @@ test-results/
 next-env.d.ts
 
 .tools/
+.firecrawl/
 artifacts/
 apps/android/dist/
 apps/android/android/.gradle/

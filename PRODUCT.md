@@ -9,7 +9,7 @@ web
 ## Product Purpose
 统一资产账本，记录真实交易及执行纪律，隔离手动历史回测，追踪财务自由目标。
 ## Capabilities and Constraints
-中文；默认深色并支持浅色；金额Decimal；UTC存储；手动价格和汇率；CSV与JSON迁移；不自动下单、提现或资金划转。
+中文；默认深色并支持浅色；金额Decimal；UTC存储；手动价格和汇率，可选TickFlow股票/ETF每日行情；CSV与JSON迁移；不自动下单、提现或资金划转。
 ## Brand Commitments
 TradeOS，专业金融终端，高信息密度；用户要求优先业务准确性，不过度美化。
 ## Evidence on Hand

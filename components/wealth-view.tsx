@@ -18,6 +18,7 @@ import { amount, when, pct, day, signedClass } from "@/lib/utils";
 import { D, sum } from "@/lib/calculations/decimal";
 import { Importer } from "./importer";
 import { AnalysisView } from "./analysis-view";
+import { MarketData } from "./market-data";
 export function Heading({
   title,
   children,
@@ -233,6 +234,7 @@ export function WealthView({
     return (
       <>
         <Heading title="资产明细" />
+        <MarketData />
         <Form
           title="登记资产"
           action="asset.create"
@@ -332,6 +334,27 @@ export function WealthView({
               },
               { key: "currency", label: "币种", value: (r) => r.currency },
               {
+                key: "price",
+                label: "最新价格",
+                value: (r) =>
+                  r.prices[0]
+                    ? `${r.currency} ${r.prices[0].price}`
+                    : "数据不足",
+              },
+              {
+                key: "priceAt",
+                label: "来源 / 时间",
+                value: (r) =>
+                  r.prices[0] ? (
+                    <>
+                      {r.prices[0].source}
+                      <div className="detail">{when(r.prices[0].at)}</div>
+                    </>
+                  ) : (
+                    "—"
+                  ),
+              },
+              {
                 key: "id",
                 label: "导入用ID",
                 value: (r) => <span className="mono">{r.id}</span>,
@@ -355,15 +378,27 @@ export function WealthView({
   if (path === "/wealth/transactions")
     return (
       <>
-        <Heading title="资金流水" />
+        <Heading title="资金流水">
+          <Link className="button outline" href="/wealth/assets#market-data">
+            添加资产
+          </Link>
+        </Heading>
+        {!s.assets.length && (
+          <p className="notice">资产目录为空，请先添加资产。</p>
+        )}
         <Form
           title="录入流水 / 期初余额"
           retain={["accountId", "assetId"]}
           action="transaction.create"
           onDone={refresh}
           fields={[
-            aField,
-            assetField,
+            {
+              ...aField,
+              value:
+                filters.accountId ??
+                (accounts.length === 1 ? accounts[0].value : undefined),
+            },
+            { ...assetField, value: filters.assetId },
             {
               name: "type",
               label: "流水类型",
@@ -435,7 +470,8 @@ export function WealthView({
               {
                 key: "price",
                 label: "价格",
-                value: (r) => amount(r.price, r.currency),
+                value: (r) =>
+                  r.price == null ? "数据不足" : `${r.currency} ${r.price}`,
               },
               {
                 key: "fee",
@@ -1052,7 +1088,8 @@ export function BalanceTable() {
         {
           key: "price",
           label: "价格",
-          value: (r) => amount(r.price, r.currency),
+          value: (r) =>
+            r.price == null ? "数据不足" : `${r.currency} ${r.price}`,
         },
         {
           key: "value",

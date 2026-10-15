@@ -18,6 +18,8 @@ try {
     ...process.env,
     DATABASE_URL: `file:${path.join(folder, "check.db")}`,
     PORT: String(port),
+    TICKFLOW_AUTO_SYNC: "false",
+    TICKFLOW_API_KEY: "",
   };
   execFileSync(
     process.execPath,

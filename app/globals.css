@@ -1328,3 +1328,26 @@ th {
 .button.outline:not(:focus-visible) {
   outline: none;
 }
+
+.market-search,
+.market-found {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+.market-search .field {
+  flex: 1;
+  min-width: min(240px, 100%);
+  margin: 0;
+}
+.market-found {
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.market-found .notice {
+  flex-basis: 100%;
+}

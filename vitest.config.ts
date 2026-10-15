@@ -3,7 +3,11 @@ import path from "node:path";
 export default defineConfig({
   resolve: { alias: { "@": path.resolve(".") } },
   test: {
-    env: { DATABASE_URL: "file:./data/unit.db" },
+    env: {
+      DATABASE_URL: "file:./data/unit.db",
+      TICKFLOW_AUTO_SYNC: "false",
+      TICKFLOW_API_KEY: "",
+    },
     include: ["tests/**/*.test.ts"],
     fileParallelism: false,
   },
