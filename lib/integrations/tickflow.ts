@@ -1,36 +1,12 @@
 import { z } from "zod";
 import { canonical } from "@/lib/calculations/decimal";
 
-export class TickFlowError extends Error {
-  constructor(
-    message: string,
-    public status = 400,
-  ) {
-    super(message);
-  }
-}
-export function tickflowConfig() {
-  const base = (
-    process.env.TICKFLOW_BASE_URL || "https://api.tickflow.org"
-  ).replace(/\/$/, "");
-  if (
-    ![
-      "https://api.tickflow.org",
-      "https://hk-api.tickflow.org",
-      "https://free-api.tickflow.org",
-    ].includes(base)
-  )
-    throw new TickFlowError("TickFlow 服务地址无效");
-  const time = process.env.TICKFLOW_DAILY_TIME || "18:00";
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time))
-    throw new TickFlowError("每日更新时间须为 HH:mm");
-  return {
-    base,
-    key: process.env.TICKFLOW_API_KEY?.trim() || "",
-    time,
-    automatic: process.env.TICKFLOW_AUTO_SYNC !== "false",
-  };
-}
+import {
+  tickflowConfig,
+  TickFlowError,
+  type TickFlowConfig,
+} from "./tickflow-config";
+export { tickflowConfig, TickFlowError } from "./tickflow-config";
 export function marketSymbol(code: string): string | null {
   let symbol = code.trim().toUpperCase();
   const prefixed = symbol.match(
@@ -69,8 +45,8 @@ export function quoteCurrency(symbol: string): string {
   if (/^200\d{3}\.SZ$/.test(symbol)) return "HKD";
   return "CNY";
 }
-async function request(endpoint: string) {
-  const { base, key } = tickflowConfig();
+async function request(endpoint: string, config = tickflowConfig()) {
+  const { base, key } = config;
   if (!key) throw new TickFlowError("尚未配置 TickFlow 密钥", 401);
   let response: Response;
   try {
@@ -132,7 +108,10 @@ export type MarketInstrument = {
   assetClass: "STOCK" | "ETF";
   currency: string;
 };
-export async function lookupInstrument(raw: string): Promise<MarketInstrument> {
+export async function lookupInstrument(
+  raw: string,
+  config?: TickFlowConfig,
+): Promise<MarketInstrument> {
   const symbol = marketSymbol(raw);
   if (!symbol)
     throw new TickFlowError(
@@ -141,6 +120,7 @@ export async function lookupInstrument(raw: string): Promise<MarketInstrument> {
   const parsed = instrumentSchema.safeParse(
     await request(
       `/v1/instruments?${new URLSearchParams({ symbols: symbol })}`,
+      config,
     ),
   );
   if (!parsed.success)
@@ -160,9 +140,13 @@ export async function lookupInstrument(raw: string): Promise<MarketInstrument> {
 export async function fetchQuote(
   symbol: string,
   now = new Date(),
+  config?: TickFlowConfig,
 ): Promise<MarketQuote> {
   const parsed = quoteSchema.safeParse(
-    await request(`/v1/quotes?${new URLSearchParams({ symbols: symbol })}`),
+    await request(
+      `/v1/quotes?${new URLSearchParams({ symbols: symbol })}`,
+      config,
+    ),
   );
   if (!parsed.success)
     throw new TickFlowError("TickFlow 报价格式异常，未保存价格", 502);

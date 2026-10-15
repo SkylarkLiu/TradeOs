@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import type { MarketSyncResult } from "@/lib/services/market";
+import type { MarketSyncResult, MarketStatus } from "@/lib/services/market";
 import type {
   MarketInstrument,
   MarketQuote,
@@ -10,16 +10,10 @@ import { when } from "@/lib/utils";
 import { mutate } from "./form";
 import { Button } from "./ui/button";
 import { useWorkspace } from "./workspace";
-type Status = {
-  configured: boolean;
-  automatic: boolean;
-  time: string;
-  last: MarketSyncResult | null;
-};
 type Lookup = MarketInstrument & { quote: MarketQuote | null; warning: string };
 export function MarketData() {
   const { state, refresh } = useWorkspace();
-  const [status, setStatus] = useState<Status | null>(null),
+  const [status, setStatus] = useState<MarketStatus | null>(null),
     [symbol, setSymbol] = useState(""),
     [found, setFound] = useState<Lookup | null>(null),
     [added, setAdded] = useState(""),
@@ -33,7 +27,7 @@ export function MarketData() {
       .then(async (r) => {
         const data = await r.json();
         if (!r.ok) throw new Error(data.error);
-        return data as Status;
+        return data as MarketStatus;
       })
       .then((value) => {
         if (!controller.signal.aborted) setStatus(value);
@@ -67,7 +61,7 @@ export function MarketData() {
     >
       <div className="section-heading">
         <div>
-          <h2 id="market-data-title">行情数据</h2>
+          <h2 id="market-data-title">TickFlow行情</h2>
           <span className="detail">
             TickFlow ·{" "}
             {status
@@ -79,27 +73,32 @@ export function MarketData() {
               : "读取中…"}
           </span>
         </div>
-        <Button
-          variant="outline"
-          disabled={!!busy || !status?.configured}
-          onClick={() =>
-            run("sync", async () => {
-              const result = (await mutate(
-                "market.sync",
-                {},
-              )) as MarketSyncResult;
-              setStatus((previous) =>
-                previous ? { ...previous, last: result } : previous,
-              );
-              setMessage(
-                `更新 ${result.updated} 项，未变 ${result.unchanged} 项，失败 ${result.failed.length} 项。`,
-              );
-              refresh();
-            })
-          }
-        >
-          {busy === "sync" ? "更新中…" : "立即更新"}
-        </Button>
+        <div className="actions">
+          <Link className="button outline" href="/settings#tickflow">
+            行情设置
+          </Link>
+          <Button
+            variant="outline"
+            disabled={!!busy || !status?.configured}
+            onClick={() =>
+              run("sync", async () => {
+                const result = (await mutate(
+                  "market.sync",
+                  {},
+                )) as MarketSyncResult;
+                setStatus((previous) =>
+                  previous ? { ...previous, last: result } : previous,
+                );
+                setMessage(
+                  `更新 ${result.updated} 项，未变 ${result.unchanged} 项，失败 ${result.failed.length} 项。`,
+                );
+                refresh();
+              })
+            }
+          >
+            {busy === "sync" ? "更新中…" : "立即更新"}
+          </Button>
+        </div>
       </div>
       {status?.last && (
         <div className="detail">
@@ -219,7 +218,9 @@ export function MarketData() {
       <details className="calculation-notes">
         <summary>更新说明</summary>
         <p>
-          服务运行时每日更新，重启补更；失败后每30分钟重试，最多3次。仅更新已登记股票和ETF的行情快照，保留原始报价时间。持仓、成本与汇率不变；其他资产仍可手动维护。
+          服务运行时每日更新，重启补更；失败后每{status?.retryMinutes ?? 30}
+          分钟重试，最多{status?.maxAttempts ?? 3}
+          次。仅更新已登记股票和ETF的行情快照，保留原始报价时间。持仓、成本与汇率不变；其他资产仍可手动维护。
         </p>
       </details>
     </section>

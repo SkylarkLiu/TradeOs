@@ -53,7 +53,7 @@ flowchart TD
 
 默认开发和生产进程监听127.0.0.1。生产启动脚本准备standalone静态资源并把数据库路径绝对化，避免独立服务器切换工作目录后创建另一个账本。恢复前备份和SQLite备份从数据库绝对路径确定位置，保存在数据库旁的backups目录。proxy验证loopback Host，对API检查Origin和跨站来源；写入口要求JSON。首版没有登录或多用户权限，适用本机访问。Docker内部监听容器网卡，Compose仅向宿主机loopback映射。
 
-核心账本可离线运行，不连接交易执行。可选TickFlow服务在Next.js的Node instrumentation启动原生定时器，按北京时间触发及启动补更；并发行情更新共享任务，重试和结果保存在SystemSetting。只写AssetPrice和审计，不改资产数量/成本/汇率。密钥从服务端环境读取，不进入工作台state和业务备份。SyncJob保留未来扩展接口，本次不新增Schema或队列。SQLite、JSON备份、附件均在本机；完整备份包含个人财务内容，Git忽略data、环境配置和生成文件。
+核心账本可离线运行，不连接交易执行。可选TickFlow服务在Next.js的Node instrumentation启动原生定时器，按北京时间触发及启动补更；并发行情更新共享任务，重试和结果保存在SystemSetting。只写AssetPrice和审计，不改资产数量/成本/汇率。密钥优先从数据库旁0600本机配置文件读取，未保存时沿用服务端环境；界面只接收更换值、不回显原文。配置原子替换、无需重启，定时任务每轮读取新配置；不进入工作台state或业务备份。SyncJob保留未来扩展接口，本次不新增Schema或队列。SQLite、JSON备份、附件均在本机；完整备份包含个人财务内容，Git忽略data、环境配置和生成文件。
 
 ## 性能边界
 

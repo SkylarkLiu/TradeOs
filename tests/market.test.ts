@@ -8,6 +8,11 @@ import {
   vi,
 } from "vitest";
 import { execFileSync } from "node:child_process";
+import { readFileSync, rmSync, statSync } from "node:fs";
+import {
+  tickflowSettingsFile,
+  tickflowConfig,
+} from "@/lib/integrations/tickflow-config";
 import { db } from "@/lib/repositories/db";
 import {
   marketSymbol,
@@ -21,6 +26,9 @@ import {
   marketStatus,
   scheduledDay,
   syncMarket,
+  saveMarketSettings,
+  testMarketConnection,
+  nextMarketRun,
 } from "@/lib/services/market";
 import { GET } from "@/app/api/market/route";
 
@@ -40,6 +48,7 @@ beforeAll(() => {
   );
 });
 beforeEach(() => {
+  rmSync(tickflowSettingsFile, { force: true });
   vi.stubEnv("TICKFLOW_API_KEY", "unit-secret");
   vi.stubEnv("TICKFLOW_BASE_URL", "https://api.tickflow.org");
   vi.stubEnv("TICKFLOW_AUTO_SYNC", "false");
@@ -57,6 +66,7 @@ beforeEach(() => {
   });
 });
 afterEach(async () => {
+  rmSync(tickflowSettingsFile, { force: true });
   await db.assetPrice.deleteMany({ where: { assetId: { in: created } } });
   await db.asset.deleteMany({ where: { id: { in: created } } });
   created.length = 0;
@@ -249,5 +259,101 @@ describe("TickFlow 行情集成", () => {
     fakeFetch.mockReset();
     await expect(syncMarket()).rejects.toThrow("尚未配置");
     expect(fakeFetch).not.toHaveBeenCalled();
+  });
+  it("设置立即持久化，密钥留空保留且不进入状态或业务审计", async () => {
+    const input = {
+      base: "https://api.tickflow.org",
+      time: "20:15",
+      automatic: false,
+      retryMinutes: 15,
+      maxAttempts: 4,
+      apiKey: "new-unit-secret",
+    };
+    const saved = await saveMarketSettings(input);
+    expect(saved).toMatchObject({
+      time: "20:15",
+      automatic: false,
+      retryMinutes: 15,
+      maxAttempts: 4,
+      configured: true,
+      nextRunAt: null,
+    });
+    expect(JSON.stringify(saved)).not.toContain("new-unit-secret");
+    expect(tickflowConfig().key).toBe("new-unit-secret");
+    expect(JSON.parse(readFileSync(tickflowSettingsFile, "utf8")).time).toBe(
+      "20:15",
+    );
+    expect(statSync(tickflowSettingsFile).mode & 0o777).toBe(0o600);
+    await saveMarketSettings({ ...input, automatic: true, apiKey: "" });
+    expect(tickflowConfig().key).toBe("new-unit-secret");
+    expect((await marketStatus()).nextRunAt).not.toBeNull();
+    expect(JSON.stringify(await db.systemSetting.findMany())).not.toContain(
+      "new-unit-secret",
+    );
+    expect(JSON.stringify(await db.auditLog.findMany())).not.toContain(
+      "new-unit-secret",
+    );
+    expect(
+      nextMarketRun("20:15", new Date("2026-10-15T12:14:00Z")).toISOString(),
+    ).toBe("2026-10-15T12:15:00.000Z");
+    expect(
+      nextMarketRun("20:15", new Date("2026-10-15T12:16:00Z")).toISOString(),
+    ).toBe("2026-10-16T12:15:00.000Z");
+  });
+  it("连接测试使用未保存的节点和密钥，不写入持仓和本机设置", async () => {
+    const saved = {
+      base: "https://api.tickflow.org",
+      time: "18:00",
+      automatic: false,
+      retryMinutes: 30,
+      maxAttempts: 3,
+      apiKey: "saved-unit-secret",
+    };
+    await saveMarketSettings(saved);
+    const transactions = await db.assetTransaction.count();
+    const result = await testMarketConnection({
+      ...saved,
+      base: "https://hk-api.tickflow.org",
+      apiKey: "draft-unit-secret",
+    });
+    expect(result.connected).toBe(true);
+    expect(String(fakeFetch.mock.calls[0][0])).toContain(
+      "https://hk-api.tickflow.org/",
+    );
+    expect(fakeFetch.mock.calls[0][1]?.headers).toEqual({
+      "x-api-key": "draft-unit-secret",
+    });
+    expect(tickflowConfig().key).toBe("saved-unit-secret");
+    expect(await db.assetTransaction.count()).toBe(transactions);
+    await expect(
+      saveMarketSettings({ ...saved, time: "25:00" }),
+    ).rejects.toThrow();
+    await expect(
+      saveMarketSettings({ ...saved, base: "https://evil.example" }),
+    ).rejects.toThrow();
+    expect(tickflowConfig().time).toBe("18:00");
+  });
+  it("自动开关与自定义重试参数在同一进程立即生效", async () => {
+    await asset();
+    const input = {
+      base: "https://api.tickflow.org",
+      time: "18:00",
+      automatic: false,
+      retryMinutes: 5,
+      maxAttempts: 2,
+      apiKey: "",
+    };
+    await saveMarketSettings(input);
+    const now = new Date("2026-10-15T10:00:00Z");
+    await dailyMarketTick(now);
+    expect(fakeFetch).not.toHaveBeenCalled();
+    await saveMarketSettings({ ...input, automatic: true });
+    fakeFetch.mockResolvedValue(Response.json({}, { status: 503 }));
+    await dailyMarketTick(now);
+    await dailyMarketTick(new Date(now.getTime() + 4 * 60000));
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+    await dailyMarketTick(new Date(now.getTime() + 5 * 60000));
+    await dailyMarketTick(new Date(now.getTime() + 10 * 60000));
+    expect(fakeFetch).toHaveBeenCalledTimes(2);
   });
 });

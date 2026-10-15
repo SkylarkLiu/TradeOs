@@ -2,6 +2,10 @@ import { z } from "zod";
 import { db } from "@/lib/repositories/db";
 import { audit, type Tx } from "./wealth";
 import {
+  proposedTickflowSettings,
+  writeTickflowSettings,
+} from "@/lib/integrations/tickflow-config";
+import {
   fetchQuote,
   lookupInstrument,
   marketSymbol,
@@ -23,7 +27,7 @@ const resultSchema = z.object({
 export type MarketSyncResult = z.infer<typeof resultSchema>;
 const dailySchema = z.object({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  attempts: z.number().int().min(0).max(3),
+  attempts: z.number().int().min(0).max(5),
   at: z.string().datetime(),
   complete: z.boolean(),
 });
@@ -60,9 +64,41 @@ export async function marketStatus() {
   const parsed = resultSchema.safeParse(saved ? safeJson(saved.value) : null);
   return {
     configured: !!config.key,
-    automatic: !!config.key && config.automatic,
+    automatic: config.automatic,
     time: config.time,
+    base: config.base,
+    retryMinutes: config.retryMinutes,
+    maxAttempts: config.maxAttempts,
+    nextRunAt:
+      config.key && config.automatic
+        ? nextMarketRun(config.time).toISOString()
+        : null,
     last: parsed.success ? parsed.data : null,
+  };
+}
+export type MarketStatus = Awaited<ReturnType<typeof marketStatus>>;
+export function nextMarketRun(time: string, now = new Date()) {
+  const day = new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
+  const next = new Date(`${day}T${time}:00+08:00`);
+  return next > now ? next : new Date(next.getTime() + 86400000);
+}
+export async function saveMarketSettings(raw: unknown) {
+  const config = proposedTickflowSettings(raw);
+  if (state.running || state.ticking)
+    throw new TickFlowError("行情正在更新，请完成后再保存设置");
+  writeTickflowSettings(config);
+  await db.systemSetting.deleteMany({ where: { key: "tickflow.daily" } });
+  startMarketScheduler();
+  return marketStatus();
+}
+export async function testMarketConnection(raw: unknown) {
+  const config = proposedTickflowSettings(raw);
+  const instrument = await lookupInstrument("600000.SH", config);
+  const quote = await fetchQuote(instrument.symbol, new Date(), config);
+  return {
+    connected: true,
+    at: new Date().toISOString(),
+    symbol: quote.symbol,
   };
 }
 function safeJson(value: string): unknown {
@@ -241,8 +277,9 @@ export async function dailyMarketTick(now = new Date()) {
     if (
       previous &&
       (previous.complete ||
-        previous.attempts >= 3 ||
-        now.getTime() - new Date(previous.at).getTime() < 30 * 60000)
+        previous.attempts >= config.maxAttempts ||
+        now.getTime() - new Date(previous.at).getTime() <
+          config.retryMinutes * 60000)
     )
       return;
     const job = {
@@ -267,8 +304,7 @@ export async function dailyMarketTick(now = new Date()) {
   }
 }
 export function startMarketScheduler() {
-  if (state.timer || !tickflowConfig().key || !tickflowConfig().automatic)
-    return;
+  if (state.timer) return;
   const tick = () => {
     void dailyMarketTick().catch(() =>
       console.error("TickFlow 每日更新失败，可在资产明细重试"),

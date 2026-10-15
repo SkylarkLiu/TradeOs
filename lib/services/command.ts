@@ -5,10 +5,17 @@ import { reviewCommand } from "./analytics";
 import { backtestCommand } from "./backtest";
 import { fireCommand } from "./fire";
 import { dataCommand } from "./data";
-import { marketImport, syncMarket } from "./market";
+import {
+  marketImport,
+  syncMarket,
+  saveMarketSettings,
+  testMarketConnection,
+} from "./market";
 export async function command(action: string, input: unknown) {
   if (action === "market.sync") return syncMarket();
   if (action === "market.import") return marketImport(input);
+  if (action === "market.settings") return saveMarketSettings(input);
+  if (action === "market.test") return testMarketConnection(input);
   if (action === "fire.save") return fireCommand(input);
   if (
     ["backup.", "reconcile.", "ledger.", "setting."].some((p) =>

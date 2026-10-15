@@ -1,4 +1,5 @@
 "use client";
+import { TickFlowSettings } from "./tickflow-settings";
 import { useState } from "react";
 import { useWorkspace } from "./workspace";
 import { Form, mutate } from "./form";
@@ -167,6 +168,7 @@ export function SettingsView() {
   return (
     <>
       <Heading title="设置与数据管理" />
+      <TickFlowSettings />
       <section className="panel">
         <h2>备份与恢复</h2>
         <div className="actions">
