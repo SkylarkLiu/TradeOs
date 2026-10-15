@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useId } from "react";
 import { Button } from "./ui/button";
 import { compareValues } from "@/lib/utils";
 export type Column<T> = {
@@ -21,6 +21,8 @@ export function Table<T>({
   searchable?: boolean;
   scrollHint?: string;
 }) {
+  const searchId = useId(),
+    searchRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null),
     [overflow, setOverflow] = useState(false);
   useEffect(() => {
@@ -38,7 +40,7 @@ export function Table<T>({
     [sort, setSort] = useState<{ key: string; desc: boolean } | null>(null),
     [page, setPage] = useState(0);
   let filtered = rows.filter((r) =>
-    JSON.stringify(r).toLowerCase().includes(query.toLowerCase()),
+    JSON.stringify(r).toLowerCase().includes(query.trim().toLowerCase()),
   );
   if (sort) {
     const col = columns.find((c) => c.key === sort.key);
@@ -56,9 +58,13 @@ export function Table<T>({
     <>
       <div className="table-tools">
         {searchable && (
-          <label>
-            <span className="sr-only">搜索记录</span>
+          <div className="table-search">
+            <label className="sr-only" htmlFor={searchId}>
+              搜索记录
+            </label>
             <input
+              id={searchId}
+              ref={searchRef}
               className="search"
               value={query}
               onChange={(e) => {
@@ -67,9 +73,27 @@ export function Table<T>({
               }}
               placeholder="搜索名称、账户或标签…"
             />
-          </label>
+            {query && (
+              <Button
+                type="button"
+                variant="ghost"
+                aria-label="清除搜索"
+                onClick={() => {
+                  setQuery("");
+                  setPage(0);
+                  searchRef.current?.focus();
+                }}
+              >
+                清除
+              </Button>
+            )}
+          </div>
         )}
-        <span className="detail">{filtered.length}条记录</span>
+        <span className="detail table-count" aria-live="polite">
+          {query.trim()
+            ? `找到 ${filtered.length} / ${rows.length} 条`
+            : `${rows.length} 条记录`}
+        </span>
       </div>
       {overflow && <p className="detail table-scroll-hint">{scrollHint}</p>}
       <div
@@ -83,7 +107,19 @@ export function Table<T>({
           <thead>
             <tr>
               {columns.map((c) => (
-                <th key={c.key}>
+                <th
+                  scope="col"
+                  key={c.key}
+                  aria-sort={
+                    c.sort
+                      ? sort?.key === c.key
+                        ? sort.desc
+                          ? "descending"
+                          : "ascending"
+                        : "none"
+                      : undefined
+                  }
+                >
                   {c.sort ? (
                     <button
                       className="button ghost"
@@ -106,8 +142,17 @@ export function Table<T>({
             </tr>
           </thead>
           <tbody>
-            {filtered.slice(current * 15, current * 15 + 15).map((r, i) => (
-              <tr key={i}>
+            {filtered.slice(current * 15, current * 15 + 15).map((r) => (
+              <tr
+                key={
+                  typeof r === "object" &&
+                  r !== null &&
+                  "id" in r &&
+                  typeof r.id === "string"
+                    ? r.id
+                    : rows.indexOf(r)
+                }
+              >
                 {columns.map((c) => (
                   <td key={c.key}>{c.value(r)}</td>
                 ))}
@@ -117,12 +162,29 @@ export function Table<T>({
         </table>
         {!filtered.length && (
           <div className="empty">
-            <strong>{empty}</strong>完成上方录入后，记录会显示在这里。
+            <strong>{query.trim() ? "没有匹配的记录" : empty}</strong>
+            {query.trim()
+              ? "试试其他关键词，或清除搜索查看全部记录。"
+              : "记录将随账本更新显示在这里。"}
+            {query.trim() && (
+              <div className="form-actions empty-actions">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setQuery("");
+                    setPage(0);
+                    searchRef.current?.focus();
+                  }}
+                >
+                  查看全部记录
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
       {filtered.length > 15 && (
-        <div className="form-actions">
+        <nav className="form-actions table-pagination" aria-label="表格分页">
           <Button
             variant="outline"
             disabled={current === 0}
@@ -140,7 +202,7 @@ export function Table<T>({
           >
             下一页
           </Button>
-        </div>
+        </nav>
       )}
     </>
   );

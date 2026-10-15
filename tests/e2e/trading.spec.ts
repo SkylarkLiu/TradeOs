@@ -96,5 +96,6 @@ test("发布策略，录入两笔成交并完成真实平仓", async ({ page, re
     page.getByText("执行计划完整，手续费已核对，继续坚持风险预算。"),
   ).toBeVisible();
   await page.goto("/trading/analytics");
+  await page.getByRole("tab", { name: "账户收益", exact: true }).click();
   await expect(page.getByText("账户TWR", { exact: true })).toBeVisible();
 });

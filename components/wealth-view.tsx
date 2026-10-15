@@ -1,5 +1,13 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
+import {
+  ArrowRight,
+  ChevronDown,
+  CircleCheck,
+  CircleAlert,
+} from "lucide-react";
+import { Button } from "./ui/button";
 import { Form, type Field } from "./form";
 import { Table } from "./table";
 import { Chart } from "./charts";
@@ -29,7 +37,9 @@ export function Heading({
 }
 export function Metrics({
   items,
+  className = "",
 }: {
+  className?: string;
   items: {
     label: string;
     value: string;
@@ -39,7 +49,9 @@ export function Metrics({
   }[];
 }) {
   return (
-    <div className={items.length === 6 ? "metrics secondary" : "metrics"}>
+    <div
+      className={`${items.length === 6 ? "metrics secondary" : "metrics"} ${className}`}
+    >
       {items.map((i) => (
         <div className="metric" key={i.label}>
           <div className="metric-label">{i.label}</div>
@@ -68,6 +80,31 @@ export function WealthView({
 }) {
   const { state: s, refresh, report } = useWorkspace(),
     p = s.portfolio;
+  const [range, setRange] = useState("all");
+  const cutoff = new Date();
+  if (range === "quarter") cutoff.setMonth(cutoff.getMonth() - 3);
+  else if (range === "year") cutoff.setFullYear(cutoff.getFullYear() - 1);
+  const snapshots = s.snapshots.filter(
+    (v) => range === "all" || new Date(v.at) >= cutoff,
+  );
+  const assetLabels: Record<string, string> = {
+    CASH: "现金",
+    STOCK: "股票",
+    ETF: "ETF",
+    MUTUAL_FUND: "公募基金",
+    CRYPTO: "加密资产",
+    BOND: "债券",
+    GOLD: "黄金",
+    REAL_ESTATE: "房产",
+    OTHER: "其他",
+    IN_TRANSIT: "在途资产",
+    DERIVATIVE_PNL: "合约浮动盈亏",
+  };
+  const allocation = p.allocation
+    .filter((a) => D(a.value).gt(0))
+    .map((a) => ({ ...a, name: assetLabels[a.name] ?? a.name }));
+  const missing = p.rows.filter((r) => r.status === "MISSING").length,
+    stale = p.rows.filter((r) => r.status === "STALE").length;
   const selectedAsset = s.assets.find((a) => a.id === filters.assetId);
   const filteredTransactions = s.transactions.filter(
     (t) =>
@@ -241,6 +278,7 @@ export function WealthView({
         <div className="equal-col">
           <Form
             title="更新资产价格"
+            retain={["assetId"]}
             action="price.create"
             onDone={refresh}
             fields={[
@@ -252,6 +290,7 @@ export function WealthView({
           />
           <Form
             title="更新汇率"
+            retain={["from", "to"]}
             action="fx.create"
             onDone={refresh}
             fields={[
@@ -319,6 +358,7 @@ export function WealthView({
         />
         <Form
           title="录入流水 / 期初余额"
+          retain={["accountId", "assetId"]}
           action="transaction.create"
           onDone={refresh}
           fields={[
@@ -571,11 +611,22 @@ export function WealthView({
         />
         <section className="panel">
           <h2>资产与净资产</h2>
+          <p className="detail">
+            {report} · 按已保存时点展示；未完整估值的时点留空。
+          </p>
           <Chart
-            labels={s.snapshots.map((v) => day(v.at))}
+            title="资产与净资产"
+            unit={report}
+            labels={s.snapshots.map((v) => when(v.at))}
             series={[
-              { name: "总资产", values: s.snapshots.map((v) => v.assets) },
-              { name: "净资产", values: s.snapshots.map((v) => v.net) },
+              {
+                name: "总资产",
+                values: s.snapshots.map((v) => (v.complete ? v.assets : null)),
+              },
+              {
+                name: "净资产",
+                values: s.snapshots.map((v) => (v.complete ? v.net : null)),
+              },
             ]}
           />
         </section>
@@ -651,141 +702,271 @@ export function WealthView({
     );
   return (
     <>
-      <Heading title="总资产" description="一份账本，掌握全部资产与风险。">
-        <Action
-          action="snapshot.create"
-          input={{ currency: report }}
-          label="保存估值快照"
-        />
-      </Heading>
-      {!p.complete && (
-        <div className="notice">
-          估值不完整：存在缺失或超过有效期的价格/汇率。下方金额是已知估值小计，不能代表完整净资产。
+      <Heading
+        title="总资产"
+        description="先看净资产，再查看收益、风险与资金分布。"
+      >
+        <div className="actions">
+          <Link href="/wealth/transactions" className="button primary">
+            录入资金 <ArrowRight size={15} aria-hidden="true" />
+          </Link>
+          <Action
+            action="snapshot.create"
+            input={{ currency: report }}
+            label="保存估值快照"
+          />
         </div>
-      )}
+      </Heading>
+      <div
+        className={`valuation-strip ${p.complete ? "valuation-complete" : "valuation-incomplete"}`}
+      >
+        {p.complete ? (
+          <CircleCheck size={17} aria-hidden="true" />
+        ) : (
+          <CircleAlert size={17} aria-hidden="true" />
+        )}
+        <div>
+          <strong>{p.complete ? "当前估值完整" : "当前估值不完整"}</strong>
+          <span>
+            {p.complete
+              ? `${p.rows.length} 项账户持仓 · ${p.inTransit} 笔在途`
+              : missing || stale
+                ? `账户持仓中 ${missing} 项缺失、${stale} 项价格过期；金额为已知估值。`
+                : "请核对负债、在途及合约的价格与汇率；已知估值不能代表完整净资产。"}
+          </span>
+        </div>
+        {!p.complete && (
+          <Link href="/wealth/assets" className="text-action">
+            补齐价格与汇率 <ArrowRight size={14} aria-hidden="true" />
+          </Link>
+        )}
+        {p.complete && (
+          <Link href="/wealth/reconciliation" className="text-action">
+            核对账本 <ArrowRight size={14} aria-hidden="true" />
+          </Link>
+        )}
+      </div>
       <Metrics
+        className="wealth-metrics"
         items={[
+          {
+            label: p.complete ? "净资产" : "已知净资产估值",
+            href: "/wealth/assets",
+            value: amount(p.net, report),
+            note: "总资产 − 总负债",
+          },
           {
             label: p.complete ? "总资产" : "已知资产估值",
             href: "/wealth/assets",
             value: amount(p.assets, report),
-            note: `含${p.inTransit}笔在途转账`,
-          },
-          { label: "总负债", value: amount(p.liabilities, report) },
-          {
-            label: "净资产",
-            href: "/wealth/assets",
-            value: amount(p.net, report),
-            note: p.complete ? "全部有效估值" : "估值不完整",
+            note: `含 ${p.inTransit} 笔在途转账`,
           },
           {
-            label: "可投资净资产",
+            label: p.complete ? "总负债" : "已知负债估值",
+            value: amount(p.liabilities, report),
+            note: "借款、信用与其他负债",
+            href: "#liabilities",
+          },
+          {
+            label: p.complete ? "可投资净资产" : "已知可投资净资产",
             href: "/wealth/assets",
             value: amount(p.investable, report),
             note: "按资产与负债配置筛选",
           },
         ]}
       />
+      <div className="section-heading">
+        <h2>收益与资金变化</h2>
+        <Link href="/wealth/history" className="text-action">
+          查看历史报表 <ArrowRight size={14} aria-hidden="true" />
+        </Link>
+      </div>
       <Metrics
+        className="performance-metrics"
         items={[
           {
             label: "今日资产变化",
             href: "/wealth/transactions",
             signed: s.summary.todayChange,
             value: amount(s.summary.todayChange, report),
-            note: "含资金流；需要今日零点快照",
+            note: "包含资金进出；需完整估值及今日零点快照",
           },
           {
             label: "本月投资损益",
             href: "/wealth/history",
             signed: s.summary.monthlyPnl,
             value: amount(s.summary.monthlyPnl, report),
-            note: "需要月初零点快照",
+            note: "扣除外部本金变化；需完整估值及月初快照",
           },
           {
             label: "年初至今TWR",
             href: "/wealth/history",
             value: pct(s.summary.ytd),
-            note: "需要年初及资金流边界估值",
-          },
-          {
-            label: "历史净资产峰值",
-            href: "/wealth/history",
-            value: amount(s.summary.peak, report),
-          },
-          {
-            label: "当前资产回撤",
-            href: "/wealth/history",
-            value: pct(s.summary.currentDrawdown),
-          },
-          {
-            label: "财务自由进度",
-            href: "/fire",
-            value: pct(s.summary.fireProgress),
+            note: "剔除外部资金进出影响；需完整估值边界",
           },
         ]}
       />
+      <details className="risk-details">
+        <summary>
+          <span>
+            风险与目标 <small>净资产峰值、回撤与财务自由进度</small>
+          </span>
+          <ChevronDown size={16} aria-hidden="true" />
+        </summary>
+        <Metrics
+          className="performance-metrics"
+          items={[
+            {
+              label: "历史净资产峰值",
+              href: "/wealth/history",
+              value: amount(s.summary.peak, report),
+            },
+            {
+              label: "当前资产回撤",
+              href: "/wealth/history",
+              value: pct(s.summary.currentDrawdown),
+              note: "相对已记录的净资产峰值",
+            },
+            {
+              label: "财务自由进度",
+              href: "/fire",
+              value: pct(s.summary.fireProgress),
+              note: "可投资净资产 / 当前财务自由目标",
+            },
+          ]}
+        />
+      </details>
       <div className="two-col">
-        <section className="panel">
-          <h2>财富轨迹</h2>
-          {s.snapshots.length ? (
-            <Chart
-              labels={s.snapshots.map((v) => day(v.at))}
-              series={[
-                { name: "总资产", values: s.snapshots.map((v) => v.assets) },
-                { name: "净资产", values: s.snapshots.map((v) => v.net) },
-              ]}
-            />
+        <section className="panel" id="wealth-trend">
+          <div className="section-heading">
+            <div>
+              <h2>财富轨迹</h2>
+              <p className="detail">
+                已保存快照 · {report} · {snapshots.length} 个时点
+              </p>
+            </div>
+            <div
+              className="segmented"
+              role="group"
+              aria-label="财富轨迹时间范围"
+            >
+              {[
+                ["quarter", "近三月"],
+                ["year", "近一年"],
+                ["all", "全部"],
+              ].map(([key, label]) => (
+                <Button
+                  key={key}
+                  variant="ghost"
+                  aria-pressed={range === key}
+                  onClick={() => setRange(key)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </div>
+          {snapshots.length ? (
+            <>
+              <Chart
+                title="财富轨迹"
+                unit={report}
+                labels={snapshots.map((v) => when(v.at))}
+                series={[
+                  {
+                    name: "总资产",
+                    values: snapshots.map((v) =>
+                      v.complete ? v.assets : null,
+                    ),
+                  },
+                  {
+                    name: "净资产",
+                    values: snapshots.map((v) => (v.complete ? v.net : null)),
+                  },
+                ]}
+              />
+              <p className="chart-caption">
+                {day(snapshots[0].at)} 至 {day(snapshots.at(-1)!.at)} ·
+                时间范围仅影响此图；连线表示快照变化，未完整估值的时点留空。
+              </p>
+            </>
           ) : (
             <div className="empty">
-              <strong>从第一笔资产开始</strong>
-              创建平台与账户，录入余额并更新价格，再保存估值快照。
-              <div
-                className="form-actions"
-                style={{ justifyContent: "center" }}
-              >
-                <Link href="/wealth/platforms" className="button primary">
-                  创建平台与账户
-                </Link>
-                <Link href="/wealth/transactions" className="button outline">
-                  录入期初余额
-                </Link>
+              <strong>
+                {range === "all" ? "从第一笔资产开始" : "所选范围还没有快照"}
+              </strong>
+              {range === "all"
+                ? "创建平台与账户，录入余额并更新价格，再保存估值快照。"
+                : "查看全部已保存快照，或补充这段时间的历史估值。"}
+              <div className="form-actions empty-actions">
+                {range === "all" ? (
+                  <>
+                    <Link href="/wealth/platforms" className="button primary">
+                      创建平台与账户
+                    </Link>
+                    <Link
+                      href="/wealth/transactions"
+                      className="button outline"
+                    >
+                      录入期初余额
+                    </Link>
+                  </>
+                ) : (
+                  <Button variant="outline" onClick={() => setRange("all")}>
+                    查看全部快照
+                  </Button>
+                )}
               </div>
             </div>
           )}
         </section>
         <section className="panel">
-          <h2>资产分布</h2>
-          {p.allocation.length ? (
-            <Chart pie={p.allocation.filter((a) => D(a.value).gt(0))} />
+          <div className="section-heading">
+            <div>
+              <h2>资产分布</h2>
+              <p className="detail">
+                {p.complete ? "当前资产" : "已知估值部分"} · {report}
+              </p>
+            </div>
+            <Link className="text-action" href="/wealth/allocation">
+              配置明细 <ArrowRight size={14} aria-hidden="true" />
+            </Link>
+          </div>
+          {allocation.length ? (
+            <Chart title="资产分布图" unit={report} pie={allocation} />
           ) : (
-            <div className="empty">暂无资产分布</div>
+            <div className="empty">暂无可估值的正值资产</div>
           )}
+          <p className="chart-caption">
+            仅展示正值资产分类，负债单独统计；金额以明细为准。
+          </p>
         </section>
       </div>
       <section className="panel">
-        <h2>账户资产</h2>
+        <div className="section-heading">
+          <div>
+            <h2>账户资产</h2>
+            <p className="detail">
+              保留原币成本与报告币种市值，点击资产可追踪对应流水。
+            </p>
+          </div>
+          <Link className="text-action" href="/wealth/assets">
+            管理资产 <ArrowRight size={14} aria-hidden="true" />
+          </Link>
+        </div>
         <BalanceTable />
       </section>
-      <Form
-        title="登记负债"
-        id="liabilities"
-        action="liability.create"
-        onDone={refresh}
-        fields={[
-          { name: "name", label: "负债名称" },
-          { name: "amount", label: "余额" },
-          { name: "currency", label: "币种", value: "CNY" },
-          {
-            name: "investable",
-            label: "从可投资净资产扣除",
-            type: "checkbox",
-            value: "true",
-          },
-        ]}
-      />
-      <section className="panel">
-        <h2>负债明细</h2>
+      <section className="panel" id="liabilities">
+        <div className="section-heading">
+          <div>
+            <h2>负债明细</h2>
+            <p className="detail">
+              负债以原币展示，折算后的已知合计为 {amount(p.liabilities, report)}
+              。
+            </p>
+          </div>
+          <span className="badge">{s.liabilities.length} 项负债</span>
+        </div>
         <Table
           rows={s.liabilities}
           columns={[
@@ -801,21 +982,51 @@ export function WealthView({
               value: (r) => (r.investable ? "是" : "否"),
             },
           ]}
+          empty="尚未登记负债"
         />
+        <details className="disclosure-form">
+          <summary>
+            登记或更新负债 <ChevronDown size={16} aria-hidden="true" />
+          </summary>
+          <p className="detail">
+            登记负债只更新欠款余额；实际借款和还款需另记资金流水。
+          </p>
+          <div className="equal-col">
+            <Form
+              title="登记负债"
+              action="liability.create"
+              onDone={refresh}
+              fields={[
+                { name: "name", label: "负债名称" },
+                { name: "amount", label: "余额" },
+                { name: "currency", label: "币种", value: "CNY" },
+                {
+                  name: "investable",
+                  label: "从可投资净资产扣除",
+                  type: "checkbox",
+                  value: "true",
+                },
+              ]}
+            />
+            <Form
+              title="更新负债余额"
+              action="liability.update"
+              onDone={refresh}
+              fields={[
+                {
+                  name: "id",
+                  label: "负债",
+                  options: s.liabilities.map((l) => ({
+                    value: l.id,
+                    label: l.name,
+                  })),
+                },
+                { name: "amount", label: "最新余额" },
+              ]}
+            />
+          </div>
+        </details>
       </section>
-      <Form
-        title="更新负债余额"
-        action="liability.update"
-        onDone={refresh}
-        fields={[
-          {
-            name: "id",
-            label: "负债",
-            options: s.liabilities.map((l) => ({ value: l.id, label: l.name })),
-          },
-          { name: "amount", label: "最新余额" },
-        ]}
-      />
     </>
   );
 }
@@ -897,7 +1108,9 @@ export function BalanceTable() {
           key: "status",
           label: "估值状态",
           value: (r) => (
-            <span className="badge">
+            <span
+              className={`badge valuation-status ${r.status === "VALID" ? "is-valid" : "is-incomplete"}`}
+            >
               {r.status === "VALID"
                 ? "有效"
                 : r.status === "STALE"

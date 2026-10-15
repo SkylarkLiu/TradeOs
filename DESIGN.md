@@ -32,6 +32,26 @@ colors:
   light-chart-4: "#7150a6"
   light-chart-5: "#a73d50"
 typography:
+  interface:
+    fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
+    fontSize: "13px"
+    fontWeight: 400
+    lineHeight: 1.6
+  primary-wealth-value:
+    fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
+    fontSize: "29px"
+    fontWeight: 600
+    lineHeight: 1.3
+  compact-wealth-value:
+    fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
+    fontSize: "22px"
+    fontWeight: 600
+    lineHeight: 1.3
+  mobile-performance-value:
+    fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
+    fontSize: "20px"
+    fontWeight: 600
+    lineHeight: 1.3
   display:
     fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
     fontSize: "25px"
@@ -306,3 +326,17 @@ ECharts 画布高度（300px），趋势线宽度（2px）且不常显点，分�
 历史表现页增加复用既有Form的指定时间快照入口，保留原有主题、布局和字体。持仓表提供数量、成本、市值及未实现盈亏的精确排序。录入失败保留输入；本地连接失败提示先核对记录，防止重复提交。计划保存后清除旧仓位预览。
 
 本轮视觉证据限于新增历史快照表单的1440×1000桌面、390×844手机显示，以及手工录入错误与成功后的语义状态；未重新进行全站视觉设计审查。
+
+## 2026-10-15 总览与报表交互优化
+
+保留既有专业金融终端、深浅语义色、系统字体与财务计算口径。电脑版本轮明确采用13px导航、按钮与表格正文，字段输入14px，手机输入16px及至少44px触达高度。净资产为首项，主值29px（手机24px），收益指标22px（手机20px）。当前与历史估值分开呈现，缺失值保留“数据不足”，不染成零收益。
+
+总览四项资产指标与三项收益变化分组，风险与目标通过原生details展开。负债明细始终可见，新增/更新表单渐进展开，避免总览被维护表单占满。财富轨迹支持近三月、近一年、全部，筛选仅影响轨迹；未完整快照留空，数据展开提供北京时间、原始精度与币种。资产分类在图例使用中文业务名称。
+
+绩效页将“交易表现”“账户收益”“增长来源”分成可键盘操作的页签。账户/日期常显，交易高级筛选渐进展开；编辑只是草稿，点击应用才更新报表。已应用范围、报告币种和生成时间均可见。交易筛选与账户收益的适用边界随当前页签说明，加载与失败均有明确状态及恢复操作。切换币种保留筛选及页签，旧结果使用旧币种标注且在切换期间不可操作。
+
+980px及以下改用300px（不超过视口86%）导航抽屉，提供遮罩、关闭按钮、Escape、焦点圈定与关闭后焦点恢复。顶部当前位置在窄屏保持可读。主题切换持久化，背景颜色立即切换以避免跨主题文字与背景短暂失配；按钮只保留有限悬停反馈。
+
+共享表单标明必填/选填，帮助文字与标签独立关联；提交时锁字段、防重复保存，失败保留输入并聚焦摘要，成功给出反馈。仅显式配置的连续录入表单保留账户/资产或汇率币种，页面说明保留范围。搜索支持清除与无匹配恢复，表头暴露排序状态。
+
+本轮截图与操作证据覆盖1440px桌面深浅总览、桌面账户报表、820px平板导航、390px总览/交易报表；不将本轮证据扩大到未改的安卓原生安装包。独立演示账本与自动化验收账本用于测试，正式账本未写入验收记录。

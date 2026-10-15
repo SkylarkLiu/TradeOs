@@ -42,11 +42,15 @@ test("非法金额和网络错误保留输入，纠正金额后可以保存", as
   await form.getByRole("button", { name: "保存", exact: true }).click();
   await expect(form.getByRole("alert")).toContainText("十进制");
   await expect(form.locator("input[name=quantity]")).toHaveValue("abc");
+  await expect(form.getByRole("alert")).toBeFocused();
   await form.locator("input[name=quantity]").fill("0.12");
   await form.getByRole("button", { name: "保存", exact: true }).click();
   await expect(
     page.getByRole("cell", { name: "0.12", exact: true }).first(),
   ).toBeVisible();
+  await expect(form.getByRole("status")).toContainText("保存成功");
+  await expect(form.locator("select[name=accountId]")).toHaveValue(a.id);
+  await expect(form.locator("select[name=assetId]")).toHaveValue(cash.id);
   await page.route("**/api/command", (route) => route.abort());
   await form.locator("select[name=accountId]").selectOption(a.id);
   await form.locator("select[name=assetId]").selectOption(cash.id);

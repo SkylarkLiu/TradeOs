@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "./ui/button";
 export type Field = {
   name: string;
@@ -46,6 +46,7 @@ export function Form({
   transform,
   submit = "保存",
   preview,
+  retain = [],
 }: {
   title: string;
   id?: string;
@@ -55,15 +56,35 @@ export function Form({
   transform?: (data: Record<string, unknown>) => unknown;
   submit?: string;
   preview?: (data: Record<string, string>) => React.ReactNode;
+  retain?: string[];
 }) {
   const [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
+    [error, setError] = useState<{ message: string } | null>(null),
+    [success, setSuccess] = useState(""),
     [values, setValues] = useState<Record<string, string>>({});
+  const formId = useId(),
+    submitting = useRef(false),
+    errorRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
   return (
     <section className="panel" id={id}>
-      <h2>{title}</h2>
+      <h2 id={`${formId}-title`}>{title}</h2>
+      <p className="form-hint" id={`${formId}-hint`}>
+        标有 * 的字段为必填；其他字段按说明填写。
+        {retain.length > 0 &&
+          `保存后保留${fields
+            .filter((f) => retain.includes(f.name))
+            .map((f) => f.label)
+            .join("、")}，其余内容重置。`}
+      </p>
       <form
+        aria-labelledby={`${formId}-title`}
+        aria-describedby={`${formId}-hint`}
+        aria-busy={busy}
         onChange={(e) => {
+          setSuccess("");
           if (preview)
             setValues(
               Object.fromEntries(
@@ -73,8 +94,11 @@ export function Form({
         }}
         onSubmit={async (e) => {
           e.preventDefault();
+          if (submitting.current) return;
           const el = e.currentTarget;
-          setError("");
+          submitting.current = true;
+          setError(null);
+          setSuccess("");
           setBusy(true);
           try {
             const fd = new FormData(el);
@@ -93,67 +117,123 @@ export function Form({
             }
             await mutate(action, transform ? transform(data) : data);
             el.reset();
+            for (const name of retain) {
+              const field = el.elements.namedItem(name);
+              if (
+                field instanceof HTMLInputElement &&
+                field.type === "checkbox"
+              )
+                field.checked = fd.has(name);
+              else if (
+                field instanceof HTMLInputElement ||
+                field instanceof HTMLSelectElement ||
+                field instanceof HTMLTextAreaElement
+              )
+                field.value = String(fd.get(name) ?? "");
+            }
             setValues({});
+            setSuccess(submit === "保存" ? "保存成功。" : `${submit}成功。`);
             onDone();
           } catch (e) {
-            setError(e instanceof Error ? e.message : "保存失败");
+            setError({ message: e instanceof Error ? e.message : "保存失败" });
           } finally {
+            submitting.current = false;
             setBusy(false);
           }
         }}
       >
-        <div className="form-grid">
-          {fields.map((f) => (
-            <label className={`field ${f.wide ? "wide" : ""}`} key={f.name}>
-              {f.label}
-              {f.options ? (
-                <select
-                  name={f.name}
-                  defaultValue={f.value ?? ""}
-                  required={!f.optional}
-                >
-                  <option value="">请选择</option>
-                  {f.options.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              ) : f.type === "textarea" ? (
-                <textarea
-                  name={f.name}
-                  defaultValue={f.value}
-                  required={!f.optional}
-                />
-              ) : f.type === "checkbox" ? (
-                <input
-                  type="checkbox"
-                  name={f.name}
-                  defaultChecked={f.value === "true"}
-                />
-              ) : (
-                <input
-                  name={f.name}
-                  type={f.type === "integer" ? "number" : (f.type ?? "text")}
-                  step={f.type === "integer" ? "1" : undefined}
-                  defaultValue={
-                    f.type === "datetime-local"
-                      ? (f.value ?? nowLocal())
-                      : f.value
-                  }
-                  required={!f.optional}
-                />
-              )}{" "}
-              {f.help && <small>{f.help}</small>}
-            </label>
-          ))}
-        </div>
+        <fieldset className="form-fields" disabled={busy}>
+          <div className="form-grid">
+            {fields.map((f) => {
+              const fieldId = `${formId}-${f.name}`,
+                helpId = f.help ? `${fieldId}-help` : undefined,
+                requirement =
+                  /可选|选填|必选|必填|留空/.test(f.label) ||
+                  f.type === "checkbox"
+                    ? ""
+                    : f.optional
+                      ? "选填"
+                      : "*";
+              return (
+                <div className={`field ${f.wide ? "wide" : ""}`} key={f.name}>
+                  <div className="field-label">
+                    <label htmlFor={fieldId}>{f.label}</label>
+                    {requirement && (
+                      <span className="field-requirement" aria-hidden="true">
+                        {requirement}
+                      </span>
+                    )}
+                  </div>
+                  {f.options ? (
+                    <select
+                      id={fieldId}
+                      name={f.name}
+                      aria-describedby={helpId}
+                      defaultValue={f.value ?? ""}
+                      required={!f.optional}
+                    >
+                      <option value="">请选择</option>
+                      {f.options.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : f.type === "textarea" ? (
+                    <textarea
+                      id={fieldId}
+                      name={f.name}
+                      aria-describedby={helpId}
+                      defaultValue={f.value}
+                      required={!f.optional}
+                    />
+                  ) : f.type === "checkbox" ? (
+                    <input
+                      type="checkbox"
+                      id={fieldId}
+                      name={f.name}
+                      aria-describedby={helpId}
+                      defaultChecked={f.value === "true"}
+                    />
+                  ) : (
+                    <input
+                      id={fieldId}
+                      name={f.name}
+                      aria-describedby={helpId}
+                      type={
+                        f.type === "integer" ? "number" : (f.type ?? "text")
+                      }
+                      step={f.type === "integer" ? "1" : undefined}
+                      defaultValue={
+                        f.type === "datetime-local"
+                          ? (f.value ?? nowLocal())
+                          : f.value
+                      }
+                      required={!f.optional}
+                    />
+                  )}
+                  {f.help && <small id={helpId}>{f.help}</small>}
+                </div>
+              );
+            })}
+          </div>
+        </fieldset>
         {preview && preview(values)}
         <div className="form-actions">
-          <Button disabled={busy}>{busy ? "保存中…" : submit}</Button>
+          <Button disabled={busy} aria-busy={busy}>
+            {busy ? "保存中…" : submit}
+          </Button>
+          <span role="status" className="form-success">
+            {success}
+          </span>
           {error && (
-            <span role="alert" className="error">
-              {error}
+            <span
+              role="alert"
+              className="error form-feedback"
+              ref={errorRef}
+              tabIndex={-1}
+            >
+              {error.message}
             </span>
           )}
         </div>
