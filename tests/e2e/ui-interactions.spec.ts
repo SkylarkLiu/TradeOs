@@ -248,6 +248,91 @@ test("搜索无匹配可清除，搜索分页与精确排序并存", async ({ pa
   await expect(panel.locator("tbody tr")).toHaveCount(15);
 });
 
+test("已有持仓时可直接保存首个财富快照，空范围可恢复", async ({
+  page,
+  request,
+}) => {
+  const state = await (await request.get("/api/state")).json();
+  state.snapshots = [];
+  state.portfolio.rows = [];
+  await page.route("**/api/state?currency=CNY", (route) =>
+    route.fulfill({ json: state }),
+  );
+  await page.goto("/wealth");
+  const trend = page.locator("#wealth-trend");
+  await expect(
+    trend.getByText("从第一笔资产开始", { exact: true }),
+  ).toBeVisible();
+  state.portfolio.rows = [
+    {
+      accountId: "snapshot-account",
+      assetId: "snapshot-cash",
+      name: "人民币",
+      code: "CASH:CNY",
+      assetClass: "CASH",
+      platform: "银行",
+      account: "现金",
+      currency: "CNY",
+      quantity: "100",
+      cost: "100",
+      price: "1",
+      value: "100",
+      unrealized: "0",
+      status: "VALID",
+      source: "MANUAL",
+      priceAt: null,
+    },
+  ];
+  await page.reload();
+  await trend.getByRole("button", { name: "近三月", exact: true }).click();
+  await expect(
+    trend.getByText("已有持仓，尚未保存快照", { exact: true }),
+  ).toBeVisible();
+  await expect(trend.getByRole("link", { name: "创建平台与账户" })).toHaveCount(
+    0,
+  );
+  await page.route("**/api/command", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      action: "snapshot.create",
+      input: { currency: "CNY" },
+    });
+    state.snapshots = [
+      {
+        id: "first-snapshot",
+        at: new Date().toISOString(),
+        currency: "CNY",
+        assets: "100",
+        net: "100",
+        liabilities: "0",
+        investable: "100",
+        complete: true,
+        allocations: [],
+      },
+    ];
+    await route.fulfill({ json: { result: state.snapshots[0] } });
+  });
+  await trend
+    .getByRole("button", { name: "保存当前快照", exact: true })
+    .click();
+  await expect(
+    trend.getByRole("img", { name: "财富轨迹，单位 CNY", exact: true }),
+  ).toBeVisible();
+  await trend.getByText("图表数据", { exact: true }).click();
+  await expect(
+    trend.getByRole("cell", { name: "100", exact: true }),
+  ).toHaveCount(2);
+  state.snapshots[0].at = "2020-01-01T00:00:00.000Z";
+  await page.reload();
+  await trend.getByRole("button", { name: "近三月", exact: true }).click();
+  await expect(
+    trend.getByText("所选范围还没有快照", { exact: true }),
+  ).toBeVisible();
+  await trend
+    .getByRole("button", { name: "查看全部快照", exact: true })
+    .click();
+  await expect(trend.getByText("1 个快照", { exact: true })).toBeVisible();
+});
+
 test("总览区分不完整估值，图表保留缺口与快照具体时间", async ({
   page,
   request,

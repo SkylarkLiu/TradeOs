@@ -913,11 +913,29 @@ export function WealthView({
           ) : (
             <div className="empty">
               <strong>
-                {range === "all" ? "从第一笔资产开始" : "所选范围还没有快照"}
+                {s.snapshots.length
+                  ? "所选范围还没有快照"
+                  : p.rows.length
+                    ? "已有持仓，尚未保存快照"
+                    : "从第一笔资产开始"}
               </strong>
-              {range === "all" ? "录入资产后保存快照。" : "可查看全部快照。"}
+              {s.snapshots.length
+                ? "可查看全部快照。"
+                : p.rows.length
+                  ? "保存当前估值，开始记录财富轨迹。"
+                  : "录入资产后保存快照。"}
               <div className="form-actions empty-actions">
-                {range === "all" ? (
+                {s.snapshots.length ? (
+                  <Button variant="outline" onClick={() => setRange("all")}>
+                    查看全部快照
+                  </Button>
+                ) : p.rows.length ? (
+                  <Action
+                    action="snapshot.create"
+                    input={{ currency: report }}
+                    label="保存当前快照"
+                  />
+                ) : (
                   <>
                     <Link href="/wealth/platforms" className="button primary">
                       创建平台与账户
@@ -929,10 +947,6 @@ export function WealthView({
                       录入期初余额
                     </Link>
                   </>
-                ) : (
-                  <Button variant="outline" onClick={() => setRange("all")}>
-                    查看全部快照
-                  </Button>
                 )}
               </div>
             </div>
