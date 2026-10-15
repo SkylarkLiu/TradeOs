@@ -12,7 +12,7 @@ import {
   testMarketConnection,
 } from "./market";
 export async function command(action: string, input: unknown) {
-  if (action === "market.sync") return syncMarket();
+  if (action === "market.sync") return syncMarket(input);
   if (action === "market.import") return marketImport(input);
   if (action === "market.settings") return saveMarketSettings(input);
   if (action === "market.test") return testMarketConnection(input);

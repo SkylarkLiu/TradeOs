@@ -19,6 +19,7 @@ import { D, sum } from "@/lib/calculations/decimal";
 import { Importer } from "./importer";
 import { AnalysisView } from "./analysis-view";
 import { MarketData } from "./market-data";
+import { HoldingQuoteUpdate } from "./holding-quote-update";
 export function Heading({
   title,
   children,
@@ -307,8 +308,11 @@ export function WealthView({
             ]}
           />
         </div>
-        <section className="panel">
-          <h2>持仓明细</h2>
+        <section className="panel" id="holdings">
+          <div className="section-heading">
+            <h2>持仓明细</h2>
+            <HoldingQuoteUpdate />
+          </div>
           <BalanceTable />
         </section>
         <section className="panel">
@@ -955,12 +959,15 @@ export function WealthView({
           </details>
         </section>
       </div>
-      <section className="panel">
+      <section className="panel" id="account-holdings">
         <div className="section-heading">
           <h2>账户资产</h2>
-          <Link className="text-action" href="/wealth/assets">
-            管理资产 <ArrowRight size={14} aria-hidden="true" />
-          </Link>
+          <div className="actions">
+            <HoldingQuoteUpdate />
+            <Link className="text-action" href="/wealth/assets">
+              管理资产 <ArrowRight size={14} aria-hidden="true" />
+            </Link>
+          </div>
         </div>
         <BalanceTable />
       </section>
@@ -1133,6 +1140,22 @@ export function BalanceTable() {
               </div>
             </>
           ),
+        },
+        {
+          key: "refresh",
+          label: "行情",
+          value: (r) =>
+            ["STOCK", "ETF"].includes(r.assetClass) &&
+            state.assets.find((a) => a.id === r.assetId)?.instrument ===
+              "SPOT" ? (
+              <HoldingQuoteUpdate
+                assetIds={[r.assetId]}
+                label="更新"
+                name={r.name}
+              />
+            ) : (
+              "—"
+            ),
         },
       ]}
       empty="还没有持仓，请先录入期初余额"

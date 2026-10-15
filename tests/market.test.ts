@@ -356,4 +356,62 @@ describe("TickFlow 行情集成", () => {
     await dailyMarketTick(new Date(now.getTime() + 10 * 60000));
     expect(fakeFetch).toHaveBeenCalledTimes(2);
   });
+  it("指定持仓只更新对应资产，重复ID去重且不回退为全目录拉取", async () => {
+    const a = await asset(),
+      b = await asset("600002.SH");
+    const result = await syncMarket({ assetIds: [a.id, a.id] });
+    expect(result.updated).toBe(1);
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+    expect(await db.assetPrice.count({ where: { assetId: b.id } })).toBe(0);
+    await expect(syncMarket({ assetIds: ["missing"] })).rejects.toThrow(
+      "不存在",
+    );
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+    expect(() => syncMarket({ assetIds: [] })).toThrow();
+  });
+  it("不同资产的并发更新排队，不返回其他资产的结果", async () => {
+    const a = await asset(),
+      b = await asset("600002.SH");
+    let release!: (value: Response) => void;
+    fakeFetch.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const one = syncMarket({ assetIds: [a.id] }),
+      two = syncMarket({ assetIds: [b.id] });
+    expect(one).not.toBe(two);
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    release(Response.json(quote()));
+    expect((await one).updated).toBe(1);
+    expect((await two).updated).toBe(1);
+    expect(fakeFetch).toHaveBeenCalledTimes(2);
+    expect(await db.assetPrice.count({ where: { assetId: b.id } })).toBe(1);
+  });
+  it("行情与资产ID关联，较新手动估值保留并明确返回原因", async () => {
+    const a = await asset("SH:600001");
+    await db.assetPrice.create({
+      data: {
+        assetId: a.id,
+        price: "20",
+        source: "MANUAL",
+        at: new Date(stamp + 1000),
+      },
+    });
+    const result = await syncMarket({ assetIds: [a.id] });
+    expect(result.retained).toEqual([
+      { code: "SH:600001", message: "手动估值时间不早于行情，保留当前价格" },
+    ]);
+    const current = await db.assetPrice.findFirst({
+      where: { assetId: a.id },
+      orderBy: { at: "desc" },
+    });
+    expect(current).toMatchObject({ price: "20", source: "MANUAL" });
+    expect(
+      await db.assetPrice.findFirst({
+        where: { assetId: a.id, source: "TICKFLOW" },
+      }),
+    ).toMatchObject({ price: "12.345" });
+  });
 });

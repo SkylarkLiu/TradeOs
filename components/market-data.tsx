@@ -105,19 +105,24 @@ export function MarketData() {
           上次 {when(status.last.at)} · 更新 {status.last.updated} · 未变{" "}
           {status.last.unchanged}
           {(status.last.failed.length > 0 ||
-            status.last.skipped.length > 0) && (
+            status.last.skipped.length > 0 ||
+            (status.last.retained?.length ?? 0) > 0) && (
             <details className="calculation-notes">
               <summary>
                 失败 {status.last.failed.length} · 跳过{" "}
                 {status.last.skipped.length}
+                {(status.last.retained?.length ?? 0) > 0 &&
+                  ` · 手动估值优先 ${status.last.retained.length}`}
               </summary>
-              {[...status.last.failed, ...status.last.skipped].map(
-                (item, i) => (
-                  <p key={`${item.code}-${i}`}>
-                    {item.code} · {item.message}
-                  </p>
-                ),
-              )}
+              {[
+                ...status.last.failed,
+                ...status.last.skipped,
+                ...(status.last.retained ?? []),
+              ].map((item, i) => (
+                <p key={`${item.code}-${i}`}>
+                  {item.code} · {item.message}
+                </p>
+              ))}
             </details>
           )}
         </div>

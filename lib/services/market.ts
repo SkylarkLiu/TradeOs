@@ -23,6 +23,7 @@ const resultSchema = z.object({
   unchanged: z.number(),
   skipped: z.array(itemSchema),
   failed: z.array(itemSchema),
+  retained: z.array(itemSchema).default([]),
 });
 export type MarketSyncResult = z.infer<typeof resultSchema>;
 const dailySchema = z.object({
@@ -36,6 +37,7 @@ const runtime = globalThis as typeof globalThis & {
     running: Promise<MarketSyncResult> | null;
     timer?: ReturnType<typeof setInterval>;
     ticking: boolean;
+    scope?: string;
   };
 };
 const state = (runtime.tradeosMarket ??= { running: null, ticking: false });
@@ -161,16 +163,21 @@ export async function marketImport(raw: unknown) {
     return { assetId: asset.id, symbol: found.symbol, warning: found.warning };
   });
 }
-async function performSync(): Promise<MarketSyncResult> {
+async function performSync(assetIds?: string[]): Promise<MarketSyncResult> {
   if (!tickflowConfig().key)
     throw new TickFlowError("尚未配置 TickFlow 密钥", 401);
-  const assets = await db.asset.findMany();
+  const assets = await db.asset.findMany({
+    where: assetIds ? { id: { in: assetIds } } : undefined,
+  });
+  if (assetIds && assets.length !== assetIds.length)
+    throw new TickFlowError("部分资产不存在，请刷新持仓后重试");
   const result: MarketSyncResult = {
     at: new Date().toISOString(),
     updated: 0,
     unchanged: 0,
     skipped: [],
     failed: [],
+    retained: [],
   };
   const quotes = new Map<string, MarketQuote>();
   let requested = false;
@@ -214,6 +221,20 @@ async function performSync(): Promise<MarketSyncResult> {
       );
       if (changed) result.updated++;
       else result.unchanged++;
+      const current = await db.assetPrice.findFirst({
+        where: { assetId: asset.id, at: { lte: new Date() } },
+        orderBy: { at: "desc" },
+      });
+      if (
+        current &&
+        current.source !== SOURCE &&
+        current.at >= new Date(quote.at)
+      ) {
+        result.retained.push({
+          code: asset.code,
+          message: "手动估值时间不早于行情，保留当前价格",
+        });
+      }
     } catch (e) {
       const message = publicError(e);
       result.failed.push({ code: asset.code, message });
@@ -235,10 +256,25 @@ async function performSync(): Promise<MarketSyncResult> {
   });
   return result;
 }
-export function syncMarket(): Promise<MarketSyncResult> {
-  if (state.running) return state.running;
-  state.running = performSync().finally(() => {
+export function syncMarket(raw: unknown = {}): Promise<MarketSyncResult> {
+  const input = z
+    .object({
+      assetIds: z.array(z.string().min(1).max(100)).min(1).max(1000).optional(),
+    })
+    .parse(raw);
+  const ids = input.assetIds ? [...new Set(input.assetIds)].sort() : undefined;
+  const scope = JSON.stringify(ids ?? null);
+  if (state.running) {
+    if (state.scope === scope) return state.running;
+    return state.running.then(
+      () => syncMarket(input),
+      () => syncMarket(input),
+    );
+  }
+  state.scope = scope;
+  state.running = performSync(ids).finally(() => {
     state.running = null;
+    state.scope = undefined;
   });
   return state.running;
 }

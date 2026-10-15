@@ -296,16 +296,18 @@ export function TickFlowSettings() {
                 上次结果 · 更新 {status.last.updated} · 未变{" "}
                 {status.last.unchanged} · 失败 {status.last.failed.length}
               </summary>
-              {[...status.last.failed, ...status.last.skipped].map(
-                (item, i) => (
-                  <p key={`${item.code}-${i}`}>
-                    {item.code} · {item.message}
-                  </p>
-                ),
-              )}
-              {!status.last.failed.length && !status.last.skipped.length && (
-                <p>本轮无异常。</p>
-              )}
+              {[
+                ...status.last.failed,
+                ...status.last.skipped,
+                ...(status.last.retained ?? []),
+              ].map((item, i) => (
+                <p key={`${item.code}-${i}`}>
+                  {item.code} · {item.message}
+                </p>
+              ))}
+              {!status.last.failed.length &&
+                !status.last.skipped.length &&
+                !status.last.retained?.length && <p>本轮无异常。</p>}
             </details>
           )}
           <details className="calculation-notes">
