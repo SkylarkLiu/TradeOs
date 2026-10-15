@@ -333,6 +333,118 @@ test("已有持仓时可直接保存首个财富快照，空范围可恢复", as
   await expect(trend.getByText("1 个快照", { exact: true })).toBeVisible();
 });
 
+test("总览按账户展开持仓和盈亏，切换账户清除搜索且收益率使用报告币种", async ({
+  page,
+  request,
+}) => {
+  const state = await (await request.get("/api/state")).json();
+  state.accounts = [
+    {
+      id: "account-one",
+      name: "A股账户",
+      platform: { name: "证券" },
+      archived: false,
+    },
+    {
+      id: "account-two",
+      name: "基金账户",
+      platform: { name: "支付宝" },
+      archived: false,
+    },
+  ];
+  const row = {
+    assetId: "shared-fund",
+    code: "FUND:000001",
+    assetClass: "MUTUAL_FUND",
+    platform: "证券",
+    quantity: "1",
+    price: "120",
+    status: "VALID",
+    source: "MANUAL",
+    priceAt: null,
+    realized: "0",
+  };
+  state.assets.push({
+    id: "shared-fund",
+    code: "FUND:000001",
+    name: "测试基金",
+    assetClass: "MUTUAL_FUND",
+    currency: "CNY",
+    instrument: "SPOT",
+    prices: [],
+  });
+  state.portfolio.rows = [
+    {
+      ...row,
+      id: "one",
+      accountId: "account-one",
+      account: "A股账户",
+      name: "账户一资产",
+      currency: "USD",
+      cost: "2",
+      value: "120",
+      unrealized: "20",
+    },
+    {
+      ...row,
+      id: "two",
+      accountId: "account-two",
+      account: "基金账户",
+      name: "账户二资产",
+      currency: "CNY",
+      cost: "100",
+      value: "75",
+      unrealized: "-25",
+    },
+  ];
+  await page.route("**/api/state?currency=CNY", (route) =>
+    route.fulfill({ json: state }),
+  );
+  await page.goto("/wealth");
+  const panel = page.locator("#account-holdings");
+  await expect(panel.locator("tbody tr")).toHaveCount(0);
+  const first = panel.getByRole("button", {
+    name: "证券 / A股账户",
+    exact: true,
+  });
+  const second = panel.getByRole("button", {
+    name: "支付宝 / 基金账户",
+    exact: true,
+  });
+  await expect(first).toContainText("持仓盈亏 CNY 20.00");
+  await expect(second).toContainText("持仓盈亏 CNY -25.00");
+  await first.click();
+  await expect(first).toHaveAttribute("aria-pressed", "true");
+  await expect(panel.locator("tbody")).toContainText("账户一资产");
+  await expect(panel.locator("tbody")).not.toContainText("账户二资产");
+  await expect(
+    panel.getByRole("cell", { name: "20.00%", exact: true }),
+  ).toBeVisible();
+  await panel.getByPlaceholder("搜索名称、账户或标签…").fill("账户一资产");
+  await second.click();
+  await expect(panel.getByPlaceholder("搜索名称、账户或标签…")).toHaveValue("");
+  await expect(panel.locator("tbody")).toContainText("账户二资产");
+  await expect(panel.locator("tbody")).not.toContainText("账户一资产");
+  await expect(
+    panel.getByRole("cell", { name: "-25.00%", exact: true }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    )
+    .toBe(true);
+  await panel
+    .getByRole("link", { name: "录入账户二资产净值", exact: true })
+    .click();
+  await expect(page).toHaveURL(/assetId=shared-fund#asset-price$/);
+  await expect(
+    page.locator("#asset-price").getByLabel("资产", { exact: true }),
+  ).toHaveValue("shared-fund");
+});
+
 test("总览区分不完整估值，图表保留缺口与快照具体时间", async ({
   page,
   request,

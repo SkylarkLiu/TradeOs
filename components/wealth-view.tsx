@@ -284,11 +284,12 @@ export function WealthView({
         <div className="equal-col">
           <Form
             title="更新资产价格"
+            id="asset-price"
             retain={["assetId"]}
             action="price.create"
             onDone={refresh}
             fields={[
-              assetField,
+              { ...assetField, value: selectedAsset?.id },
               { name: "price", label: "最新价格" },
               atField,
               { name: "source", label: "价格来源", value: "MANUAL" },
@@ -973,18 +974,7 @@ export function WealthView({
           </details>
         </section>
       </div>
-      <section className="panel" id="account-holdings">
-        <div className="section-heading">
-          <h2>账户资产</h2>
-          <div className="actions">
-            <HoldingQuoteUpdate />
-            <Link className="text-action" href="/wealth/assets">
-              管理资产 <ArrowRight size={14} aria-hidden="true" />
-            </Link>
-          </div>
-        </div>
-        <BalanceTable />
-      </section>
+      <AccountHoldings />
       <section className="panel" id="liabilities">
         <div className="section-heading">
           <h2>负债明细</h2>
@@ -1065,11 +1055,101 @@ function group(
     ).toFixed(),
   }));
 }
-export function BalanceTable() {
+function AccountHoldings() {
   const { state, report } = useWorkspace();
+  const [accountId, setAccountId] = useState<string | null>(null);
+  const accounts = state.accounts.filter(
+    (a) =>
+      !a.archived || state.portfolio.rows.some((r) => r.accountId === a.id),
+  );
+  const selected = accounts.find((a) => a.id === accountId);
+  const rows = state.portfolio.rows.filter((r) => r.accountId === selected?.id);
+  return (
+    <section className="panel" id="account-holdings">
+      <div className="section-heading">
+        <h2>账户资产</h2>
+        <Link className="text-action" href="/wealth/assets">
+          管理资产 <ArrowRight size={14} aria-hidden="true" />
+        </Link>
+      </div>
+      <div className="account-selector" role="group" aria-label="选择持仓账户">
+        {accounts.map((a) => {
+          const holdings = state.portfolio.rows.filter(
+            (r) => r.accountId === a.id,
+          );
+          const complete = holdings.every((r) => r.status === "VALID");
+          const value = sum(holdings.map((r) => r.value ?? "0")).toFixed();
+          const pnl = holdings.some((r) => r.unrealized === null)
+            ? null
+            : sum(holdings.map((r) => r.unrealized!)).toFixed();
+          return (
+            <button
+              type="button"
+              className="account-choice"
+              key={a.id}
+              aria-label={`${a.platform.name} / ${a.name}`}
+              aria-pressed={selected?.id === a.id}
+              aria-controls="selected-account-holdings"
+              onClick={() => setAccountId(a.id)}
+            >
+              <span className="account-choice-name">
+                {a.platform.name} / {a.name}
+              </span>
+              <strong>{amount(value, report)}</strong>
+              <span className="detail">
+                {holdings.length} 项持仓{!complete && " · 已知估值"}
+              </span>
+              <span className={signedClass(pnl)}>
+                持仓盈亏 {amount(pnl, report)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {selected ? (
+        <div
+          id="selected-account-holdings"
+          role="region"
+          aria-label={`${selected.name}持仓`}
+        >
+          <div className="section-heading account-holdings-heading">
+            <h3>{selected.name}</h3>
+            {rows.some((r) => ["STOCK", "ETF"].includes(r.assetClass)) ? (
+              <HoldingQuoteUpdate
+                key={selected.id}
+                assetIds={rows.map((r) => r.assetId)}
+              />
+            ) : rows.some((r) => r.assetClass === "MUTUAL_FUND") ? (
+              <Link
+                className="button outline"
+                href="/wealth/assets#asset-price"
+              >
+                录入基金净值
+              </Link>
+            ) : null}
+          </div>
+          <BalanceTable key={selected.id} accountId={selected.id} />
+        </div>
+      ) : (
+        <div className="empty">选择账户查看持仓及盈亏</div>
+      )}
+    </section>
+  );
+}
+export function BalanceTable({ accountId }: { accountId?: string } = {}) {
+  const { state, report } = useWorkspace();
+  const openingNote = (row: (typeof state.portfolio.rows)[number]) =>
+    state.transactions.find(
+      (t) =>
+        t.accountId === row.accountId &&
+        t.assetId === row.assetId &&
+        t.note.startsWith("截图期初录入"),
+    )?.note;
   return (
     <Table
-      rows={state.portfolio.rows}
+      rows={state.portfolio.rows.filter(
+        (r) => !accountId || r.accountId === accountId,
+      )}
       scrollHint="左右滑动查看市值、盈亏及估值状态"
       columns={[
         {
@@ -1085,6 +1165,12 @@ export function BalanceTable() {
                   {r.code} · <span className="asset-detail-link">查看流水</span>
                 </div>
               </Link>
+              {openingNote(r) && (
+                <details className="calculation-notes">
+                  <summary>录入依据</summary>
+                  <p>{openingNote(r)}</p>
+                </details>
+              )}
             </>
           ),
           sort: (r) => r.name,
@@ -1097,7 +1183,21 @@ export function BalanceTable() {
         {
           key: "qty",
           label: "数量",
-          value: (r) => <span className="mono">{r.quantity}</span>,
+          value: (r) =>
+            r.code.startsWith("MANUAL:") ? (
+              "按金额估值"
+            ) : (
+              <>
+                <span className="mono" title={r.quantity}>
+                  {openingNote(r)?.includes("份额为推算值")
+                    ? `≈ ${D(r.quantity).toFixed(4)}`
+                    : r.quantity}
+                </span>
+                {openingNote(r)?.includes("份额为推算值") && (
+                  <div className="detail">推算份额</div>
+                )}
+              </>
+            ),
           sort: (r) => r.quantity,
         },
         {
@@ -1129,6 +1229,21 @@ export function BalanceTable() {
           ),
         },
         {
+          key: "return",
+          label: "持仓收益率",
+          value: (r) => {
+            const cost =
+              r.value !== null && r.unrealized !== null
+                ? D(r.value).minus(r.unrealized)
+                : null;
+            return (
+              <span className={signedClass(r.unrealized)}>
+                {pct(cost?.gt(0) ? D(r.unrealized!).div(cost).toFixed() : null)}
+              </span>
+            );
+          },
+        },
+        {
           key: "status",
           label: "估值状态",
           value: (r) => (
@@ -1148,7 +1263,11 @@ export function BalanceTable() {
           label: "估值来源 / 时间",
           value: (r) => (
             <>
-              {r.source}
+              {r.source === "PUBLIC_NAV_REFERENCE"
+                ? "公开参考净值"
+                : r.source === "SCREENSHOT_AMOUNT"
+                  ? "截图估值"
+                  : r.source}
               <div className="detail">
                 {r.priceAt ? when(r.priceAt) : "现金单位价值"}
               </div>
@@ -1167,6 +1286,14 @@ export function BalanceTable() {
                 label="更新"
                 name={r.name}
               />
+            ) : r.assetClass === "MUTUAL_FUND" ? (
+              <Link
+                className="button outline"
+                href={`/wealth/assets?assetId=${encodeURIComponent(r.assetId)}#asset-price`}
+                aria-label={`录入${r.name}净值`}
+              >
+                录入净值
+              </Link>
             ) : (
               "—"
             ),

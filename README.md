@@ -79,7 +79,7 @@ npm run test:standalone
 npm audit --omit=dev
 ```
 
-当前62项计算/数据库/访问保护测试与24条浏览器测试通过，覆盖20个主要页面。测试使用 `data/unit.db`、`data/e2e.db`，不会写入正式或演示账本。执行结果与边界见 [测试及验收](docs/testing.md)。
+当前62项计算/数据库/访问保护测试与26条浏览器测试通过，覆盖20个主要页面。测试使用 `data/unit.db`、`data/e2e.db`，不会写入正式或演示账本。执行结果与边界见 [测试及验收](docs/testing.md)。
 
 ## 文档
 

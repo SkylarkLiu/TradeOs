@@ -130,6 +130,12 @@ test("持仓批量与单项更新定向关联，刷新价格市值且保留数�
     await expect(row.getByRole("alert")).toContainText("连接失败");
     await expect(row).toContainText("CNY 20");
     await page.goto("/wealth");
+    await page
+      .getByRole("button", {
+        name: `${platform.name} / 行情测试账户`,
+        exact: true,
+      })
+      .click();
     await expect(
       page
         .locator("#account-holdings")

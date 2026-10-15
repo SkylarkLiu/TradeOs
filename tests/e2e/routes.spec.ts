@@ -67,6 +67,12 @@ test("手机表格提示横滑，资产链接保留筛选上下文", async ({ pa
   expect(row).toBeTruthy();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/wealth");
+  await page
+    .getByRole("button", {
+      name: `${row.platform} / ${row.account}`,
+      exact: true,
+    })
+    .click();
   await expect(
     page.getByText("左右滑动查看市值、盈亏及估值状态"),
   ).toBeVisible();
