@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/repositories/db";
 import { audit, type Tx } from "./wealth";
+import { scheduledSlot, nextScheduledRun } from "@/lib/schedule";
 import {
   proposedTickflowSettings,
   writeTickflowSettings,
@@ -68,28 +69,41 @@ export async function marketStatus() {
     configured: !!config.key,
     automatic: config.automatic,
     time: config.time,
+    times: config.times,
     base: config.base,
     retryMinutes: config.retryMinutes,
     maxAttempts: config.maxAttempts,
     nextRunAt:
       config.key && config.automatic
-        ? nextMarketRun(config.time).toISOString()
+        ? nextMarketRun(config.times).toISOString()
         : null,
     last: parsed.success ? parsed.data : null,
   };
 }
 export type MarketStatus = Awaited<ReturnType<typeof marketStatus>>;
-export function nextMarketRun(time: string, now = new Date()) {
-  const day = new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
-  const next = new Date(`${day}T${time}:00+08:00`);
-  return next > now ? next : new Date(next.getTime() + 86400000);
+export function nextMarketRun(time: string | string[], now = new Date()) {
+  return nextScheduledRun(typeof time === "string" ? [time] : time, now);
 }
 export async function saveMarketSettings(raw: unknown) {
   const config = proposedTickflowSettings(raw);
   if (state.running || state.ticking)
     throw new TickFlowError("行情正在更新，请完成后再保存设置");
+  const previousTime = tickflowConfig().time;
+  await db.$transaction(async (tx) => {
+    const legacy = await tx.systemSetting.findUnique({
+      where: { key: "tickflow.daily" },
+    });
+    if (legacy) {
+      const key = `tickflow.daily:${previousTime}`;
+      await tx.systemSetting.upsert({
+        where: { key },
+        create: { key, value: legacy.value },
+        update: {},
+      });
+      await tx.systemSetting.delete({ where: { key: "tickflow.daily" } });
+    }
+  });
   writeTickflowSettings(config);
-  await db.systemSetting.deleteMany({ where: { key: "tickflow.daily" } });
   startMarketScheduler();
   return marketStatus();
 }
@@ -280,22 +294,7 @@ export function syncMarket(raw: unknown = {}): Promise<MarketSyncResult> {
 }
 // One local server owns the timer; persisted daily attempts survive restarts.
 export function scheduledDay(now: Date, time: string) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(now);
-  const part = (type: string) => parts.find((p) => p.type === type)!.value;
-  const day = `${part("year")}-${part("month")}-${part("day")}`;
-  return `${part("hour")}:${part("minute")}` >= time
-    ? day
-    : new Date(new Date(`${day}T00:00:00Z`).getTime() - 86400000)
-        .toISOString()
-        .slice(0, 10);
+  return scheduledSlot(now, [time]).day;
 }
 export async function dailyMarketTick(now = new Date()) {
   const config = tickflowConfig();
@@ -303,11 +302,21 @@ export async function dailyMarketTick(now = new Date()) {
     return;
   state.ticking = true;
   try {
-    const day = scheduledDay(now, config.time);
+    const { day, time } = scheduledSlot(now, config.times);
+    const key = `tickflow.daily:${time}`;
     const saved = await db.systemSetting.findUnique({
-      where: { key: "tickflow.daily" },
+      where: { key },
     });
-    const parsed = dailySchema.safeParse(saved ? safeJson(saved.value) : null);
+    // Legacy single-time jobs remain valid for the first configured slot.
+    const legacy =
+      !saved && time === config.time
+        ? await db.systemSetting.findUnique({
+            where: { key: "tickflow.daily" },
+          })
+        : null;
+    const parsed = dailySchema.safeParse(
+      saved ? safeJson(saved.value) : legacy ? safeJson(legacy.value) : null,
+    );
     const previous =
       parsed.success && parsed.data.day === day ? parsed.data : null;
     if (
@@ -325,14 +334,14 @@ export async function dailyMarketTick(now = new Date()) {
       complete: false,
     };
     await db.systemSetting.upsert({
-      where: { key: "tickflow.daily" },
-      create: { key: "tickflow.daily", value: JSON.stringify(job) },
+      where: { key },
+      create: { key, value: JSON.stringify(job) },
       update: { value: JSON.stringify(job) },
     });
     const result = await syncMarket();
     job.complete = result.failed.length === 0;
     await db.systemSetting.update({
-      where: { key: "tickflow.daily" },
+      where: { key },
       data: { value: JSON.stringify(job) },
     });
   } finally {
@@ -340,7 +349,7 @@ export async function dailyMarketTick(now = new Date()) {
   }
 }
 export function startMarketScheduler() {
-  if (state.timer) return;
+  if (state.timer || process.env.NODE_ENV === "test") return;
   const tick = () => {
     void dailyMarketTick().catch(() =>
       console.error("TickFlow 每日更新失败，可在资产明细重试"),

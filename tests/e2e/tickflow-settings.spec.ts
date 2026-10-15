@@ -14,9 +14,15 @@ test("TickFlow设置从行情入口可达，保存后刷新保留且密钥不回
     form = panel.getByRole("form", { name: "TickFlow设置", exact: true });
   await expect(form).toBeVisible();
   await form.getByLabel("自动拉取行情", { exact: true }).uncheck();
+  await form.getByLabel("拉取时间 1", { exact: true }).fill("20:35");
+  await form.getByRole("button", { name: "添加时间", exact: true }).click();
+  await form.getByLabel("拉取时间 2", { exact: true }).fill("08:00");
+  await form.getByRole("button", { name: "添加时间", exact: true }).click();
+  await form.getByLabel("拉取时间 3", { exact: true }).fill("09:00");
   await form
-    .getByLabel("每日拉取时间（北京时间）", { exact: true })
-    .fill("20:35");
+    .getByRole("button", { name: "删除拉取时间 3", exact: true })
+    .click();
+  await expect(form.getByLabel("拉取时间 3", { exact: true })).toHaveCount(0);
   await form.getByText("重试设置", { exact: true }).click();
   await form.getByLabel("失败重试间隔（分钟）", { exact: true }).fill("15");
   await form.getByLabel("每轮最多尝试次数", { exact: true }).fill("4");
@@ -26,9 +32,12 @@ test("TickFlow设置从行情入口可达，保存后刷新保留且密钥不回
   await form.getByRole("button", { name: "保存设置", exact: true }).click();
   await expect(panel.getByRole("status")).toContainText("已保存");
   await page.reload();
-  await expect(
-    form.getByLabel("每日拉取时间（北京时间）", { exact: true }),
-  ).toHaveValue("20:35");
+  await expect(form.getByLabel("拉取时间 1", { exact: true })).toHaveValue(
+    "08:00",
+  );
+  await expect(form.getByLabel("拉取时间 2", { exact: true })).toHaveValue(
+    "20:35",
+  );
   await expect(
     form.getByLabel("自动拉取行情", { exact: true }),
   ).not.toBeChecked();
@@ -39,7 +48,8 @@ test("TickFlow设置从行情入口可达，保存后刷新保留且密钥不回
   ).toHaveValue("15");
   const data = await (await request.get("/api/market")).json();
   expect(data).toMatchObject({
-    time: "20:35",
+    time: "08:00",
+    times: ["08:00", "20:35"],
     automatic: false,
     retryMinutes: 15,
     maxAttempts: 4,
@@ -59,16 +69,17 @@ test("设置连接测试使用未保存配置，错误保留输入且手机无�
   page,
   request,
 }) => {
-  const originalTime = (await (await request.get("/api/market")).json()).time;
+  const original = await (await request.get("/api/market")).json();
+  const originalTime = original.time;
   await page.setViewportSize({ width: 390, height: 844 });
   let rejected = true;
   await page.route("**/api/command", async (route) => {
     const data = route.request().postDataJSON();
     if (data.action !== "market.test") return route.continue();
     expect(data.input).toMatchObject({
-      time: "21:10",
       apiKey: "e2e-placeholder",
     });
+    expect(data.input.times).toEqual(["21:10", ...original.times.slice(1)]);
     await route.fulfill(
       rejected
         ? { status: 400, json: { error: "TickFlow 密钥无效或已过期" } }
@@ -78,9 +89,7 @@ test("设置连接测试使用未保存配置，错误保留输入且手机无�
   await page.goto("/settings#tickflow");
   const panel = page.locator("#tickflow"),
     form = panel.getByRole("form", { name: "TickFlow设置", exact: true });
-  await form
-    .getByLabel("每日拉取时间（北京时间）", { exact: true })
-    .fill("21:10");
+  await form.getByLabel("拉取时间 1", { exact: true }).fill("21:10");
   await form.getByLabel("API Key", { exact: true }).fill("e2e-placeholder");
   await expect(form.getByLabel("API Key", { exact: true })).toHaveAttribute(
     "type",
@@ -103,7 +112,7 @@ test("设置连接测试使用未保存配置，错误保留输入且手机无�
   ).toBe(true);
   await page.reload();
   await expect(form.getByLabel("API Key", { exact: true })).toHaveValue("");
-  await expect(
-    form.getByLabel("每日拉取时间（北京时间）", { exact: true }),
-  ).toHaveValue(originalTime);
+  await expect(form.getByLabel("拉取时间 1", { exact: true })).toHaveValue(
+    originalTime,
+  );
 });

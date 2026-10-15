@@ -8,7 +8,7 @@ import {
   vi,
 } from "vitest";
 import { execFileSync } from "node:child_process";
-import { readFileSync, rmSync, statSync } from "node:fs";
+import { readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import {
   tickflowSettingsFile,
   tickflowConfig,
@@ -225,7 +225,9 @@ describe("TickFlow 行情集成", () => {
     await dailyMarketTick(now);
     await dailyMarketTick(new Date(now.getTime() + 60000));
     expect(fakeFetch).toHaveBeenCalledTimes(1);
-    await db.systemSetting.deleteMany({ where: { key: "tickflow.daily" } });
+    await db.systemSetting.deleteMany({
+      where: { key: { startsWith: "tickflow.daily" } },
+    });
     fakeFetch.mockReset();
     fakeFetch.mockResolvedValue(Response.json({}, { status: 503 }));
     await dailyMarketTick(now);
@@ -239,7 +241,7 @@ describe("TickFlow 行情集成", () => {
       JSON.parse(
         (
           await db.systemSetting.findUniqueOrThrow({
-            where: { key: "tickflow.daily" },
+            where: { key: "tickflow.daily:18:00" },
           })
         ).value,
       ).attempts,
@@ -355,6 +357,107 @@ describe("TickFlow 行情集成", () => {
     await dailyMarketTick(new Date(now.getTime() + 5 * 60000));
     await dailyMarketTick(new Date(now.getTime() + 10 * 60000));
     expect(fakeFetch).toHaveBeenCalledTimes(2);
+  });
+  it("多个拉取时间去重排序，分别去重执行并独立重试，保存不重跑已完成时点", async () => {
+    await asset();
+    const input = {
+      base: "https://api.tickflow.org",
+      times: ["18:00", "08:00", "18:00"],
+      automatic: true,
+      retryMinutes: 5,
+      maxAttempts: 2,
+      apiKey: "",
+    };
+    const saved = await saveMarketSettings(input);
+    expect(saved.times).toEqual(["08:00", "18:00"]);
+    expect(
+      nextMarketRun(
+        saved.times,
+        new Date("2026-10-15T00:01:00Z"),
+      ).toISOString(),
+    ).toBe("2026-10-15T10:00:00.000Z");
+    await dailyMarketTick(new Date("2026-10-15T00:00:00Z"));
+    await dailyMarketTick(new Date("2026-10-15T00:01:00Z"));
+    await saveMarketSettings(input);
+    await dailyMarketTick(new Date("2026-10-15T00:02:00Z"));
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+    fakeFetch.mockResolvedValue(Response.json({}, { status: 503 }));
+    await dailyMarketTick(new Date("2026-10-15T10:00:00Z"));
+    await dailyMarketTick(new Date("2026-10-15T10:04:00Z"));
+    await dailyMarketTick(new Date("2026-10-15T10:05:00Z"));
+    await dailyMarketTick(new Date("2026-10-15T10:10:00Z"));
+    expect(fakeFetch).toHaveBeenCalledTimes(3);
+    expect(
+      JSON.parse(
+        (
+          await db.systemSetting.findUniqueOrThrow({
+            where: { key: "tickflow.daily:08:00" },
+          })
+        ).value,
+      ).complete,
+    ).toBe(true);
+    expect(
+      JSON.parse(
+        (
+          await db.systemSetting.findUniqueOrThrow({
+            where: { key: "tickflow.daily:18:00" },
+          })
+        ).value,
+      ).attempts,
+    ).toBe(2);
+    await expect(saveMarketSettings({ ...input, times: [] })).rejects.toThrow();
+    await expect(
+      saveMarketSettings({ ...input, times: ["24:00"] }),
+    ).rejects.toThrow();
+  });
+  it("旧版单时间本机配置保留密钥与原时间，停机仅补最近到期时点", async () => {
+    writeFileSync(
+      tickflowSettingsFile,
+      JSON.stringify({ time: "19:10", key: "legacy-unit-secret" }),
+    );
+    expect(tickflowConfig()).toMatchObject({
+      time: "19:10",
+      times: ["19:10"],
+      key: "legacy-unit-secret",
+    });
+    writeFileSync(
+      tickflowSettingsFile,
+      JSON.stringify({ time: "18:00", key: "legacy-unit-secret" }),
+    );
+    await db.systemSetting.create({
+      data: {
+        key: "tickflow.daily",
+        value: JSON.stringify({
+          day: "2026-10-15",
+          attempts: 1,
+          at: "2026-10-15T10:00:00Z",
+          complete: true,
+        }),
+      },
+    });
+    await asset();
+    await saveMarketSettings({
+      base: "https://api.tickflow.org",
+      times: ["08:00", "12:00", "18:00"],
+      automatic: true,
+      retryMinutes: 30,
+      maxAttempts: 3,
+    });
+    await dailyMarketTick(new Date("2026-10-15T11:00:00Z"));
+    expect(fakeFetch).not.toHaveBeenCalled();
+    await db.systemSetting.delete({ where: { key: "tickflow.daily:18:00" } });
+    await dailyMarketTick(new Date("2026-10-15T11:00:00Z"));
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+    expect(
+      await db.systemSetting.findUnique({
+        where: { key: "tickflow.daily:12:00" },
+      }),
+    ).toBeNull();
+    expect(
+      await db.systemSetting.findUnique({
+        where: { key: "tickflow.daily:18:00" },
+      }),
+    ).not.toBeNull();
   });
   it("指定持仓只更新对应资产，重复ID去重且不回退为全目录拉取", async () => {
     const a = await asset(),

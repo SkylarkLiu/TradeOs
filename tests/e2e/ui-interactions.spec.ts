@@ -330,7 +330,7 @@ test("已有持仓时可直接保存首个财富快照，空范围可恢复", as
   await trend
     .getByRole("button", { name: "查看全部快照", exact: true })
     .click();
-  await expect(trend.getByText("1 个快照", { exact: true })).toBeVisible();
+  await expect(trend).toContainText("1 个快照");
 });
 
 test("总览按账户展开持仓和盈亏，切换账户清除搜索且收益率使用报告币种", async ({

@@ -169,6 +169,26 @@ export function SettingsView() {
     <>
       <Heading title="设置与数据管理" />
       <TickFlowSettings />
+      <section className="panel" id="snapshot-schedule">
+        <h2>自动估值快照</h2>
+        <p>
+          {s.snapshotSchedule.enabled
+            ? "每日 08:00（北京时间） · CNY · 同日覆盖"
+            : "自动保存已暂停"}
+        </p>
+        <p className="detail">
+          上次自动保存：
+          {s.snapshotSchedule.last
+            ? `${when(s.snapshotSchedule.last.at)} · ${s.snapshotSchedule.last.complete ? "已保存" : s.snapshotSchedule.last.error}`
+            : "尚无记录"}
+        </p>
+        <details className="calculation-notes">
+          <summary>执行说明</summary>
+          <p>
+            服务运行时执行；当天错过08:00，启动后保存当前估值，不补造历史时点。估值不完整时保留旧快照，每30分钟重试。每个日期、每种报告币种保留一个快照，其他日期的历史保留。
+          </p>
+        </details>
+      </section>
       <section className="panel">
         <h2>备份与恢复</h2>
         <div className="actions">

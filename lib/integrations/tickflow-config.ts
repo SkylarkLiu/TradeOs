@@ -18,13 +18,26 @@ export class TickFlowError extends Error {
     super(message);
   }
 }
-export const tickflowSettingsSchema = z.object({
-  base: z.enum(["https://api.tickflow.org", "https://hk-api.tickflow.org"]),
-  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "每日拉取时间须为 HH:mm"),
-  automatic: z.boolean(),
-  retryMinutes: z.number().int().min(5).max(180),
-  maxAttempts: z.number().int().min(1).max(5),
-});
+const timeSchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "每日拉取时间须为 HH:mm");
+export const tickflowSettingsSchema = z
+  .object({
+    base: z.enum(["https://api.tickflow.org", "https://hk-api.tickflow.org"]),
+    time: timeSchema.optional(),
+    times: z
+      .array(timeSchema)
+      .min(1, "至少保留一个拉取时间")
+      .max(24, "最多设置24个时间")
+      .optional(),
+    automatic: z.boolean(),
+    retryMinutes: z.number().int().min(5).max(180),
+    maxAttempts: z.number().int().min(1).max(5),
+  })
+  .transform((input) => {
+    const times = [...new Set(input.times ?? [input.time ?? "18:00"])].sort();
+    return { ...input, times, time: times[0] };
+  });
 export type TickFlowSettings = z.infer<typeof tickflowSettingsSchema>;
 export type TickFlowConfig = TickFlowSettings & { key: string };
 export const tickflowSettingsFile = `${databaseFile}.tickflow.json`;
@@ -47,29 +60,27 @@ export function tickflowConfig(): TickFlowConfig {
   } catch {
     throw new TickFlowError("TickFlow 本机配置文件无法读取");
   }
-  const schema = tickflowSettingsSchema.extend({ key: z.string().max(300) });
-  const parsed = schema.safeParse({
+  const merged = {
     ...defaults,
     ...(saved && typeof saved === "object" ? saved : {}),
-  });
-  if (!parsed.success)
+  };
+  const parsed = tickflowSettingsSchema.safeParse(merged);
+  const key = z.string().max(300).safeParse(merged.key);
+  if (!parsed.success || !key.success)
     throw new TickFlowError(
       "TickFlow 配置无效，请检查服务地址、时间与重试设置",
     );
-  return parsed.data;
+  return { ...parsed.data, key: key.data };
 }
 export function proposedTickflowSettings(raw: unknown): TickFlowConfig {
-  const input = tickflowSettingsSchema
-    .extend({ apiKey: z.string().trim().max(300).optional() })
+  const input = tickflowSettingsSchema.parse(raw);
+  const { apiKey } = z
+    .object({ apiKey: z.string().trim().max(300).optional() })
     .parse(raw);
   const current = tickflowConfig();
   return {
-    base: input.base,
-    time: input.time,
-    automatic: input.automatic,
-    retryMinutes: input.retryMinutes,
-    maxAttempts: input.maxAttempts,
-    key: input.apiKey || current.key,
+    ...input,
+    key: apiKey || current.key,
   };
 }
 export function writeTickflowSettings(config: TickFlowConfig) {

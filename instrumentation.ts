@@ -9,5 +9,7 @@ export async function register() {
     } catch {
       console.error("TickFlow 配置无效，行情任务未启动；账本仍可正常使用");
     }
+    const { startSnapshotScheduler } = await import("./lib/services/snapshots");
+    startSnapshotScheduler();
   }
 }

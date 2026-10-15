@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/repositories/db";
+import { dayBounds } from "@/lib/schedule";
 import type { Prisma } from "@/generated/prisma/client";
 import { D, canonical, sum, contractPnl } from "@/lib/calculations/decimal";
 import {
@@ -363,24 +364,42 @@ export async function wealthCommand(action: string, raw: unknown) {
         const state = await portfolio(report, at, tx);
         if (!state.complete)
           throw new Error("存在缺失或过期估值，更新价格和汇率后再保存完整快照");
-        const r = await tx.portfolioSnapshot.create({
-          data: {
-            currency: report,
-            assets: state.assets,
-            liabilities: state.liabilities,
-            net: state.net,
-            investable: state.investable,
-            complete: state.complete,
-            at,
-            allocations: {
-              create: state.allocation.map((a) => ({
-                assetClass: a.name,
-                value: a.value,
-              })),
-            },
-          },
+        const existing = await tx.portfolioSnapshot.findMany({
+          where: { currency: report, at: dayBounds(at) },
+          orderBy: { at: "desc" },
         });
-        await audit(tx, action, r.id, { currency: report });
+        const ids = existing.map((s) => s.id);
+        await tx.assetAllocationSnapshot.deleteMany({
+          where: { snapshotId: { in: ids } },
+        });
+        await tx.portfolioSnapshot.deleteMany({
+          where: { id: { in: ids.slice(1) } },
+        });
+        const data = {
+          currency: report,
+          assets: state.assets,
+          liabilities: state.liabilities,
+          net: state.net,
+          investable: state.investable,
+          complete: state.complete,
+          at,
+          allocations: {
+            create: state.allocation.map((a) => ({
+              assetClass: a.name,
+              value: a.value,
+            })),
+          },
+        };
+        const r = existing[0]
+          ? await tx.portfolioSnapshot.update({
+              where: { id: existing[0].id },
+              data,
+            })
+          : await tx.portfolioSnapshot.create({ data });
+        await audit(tx, action, r.id, {
+          currency: report,
+          replaced: existing.length,
+        });
         return r;
       });
     }

@@ -1,6 +1,7 @@
 import { db } from "@/lib/repositories/db";
 import { portfolio } from "./wealth";
 import { wealthSummary } from "./summary";
+import { snapshotScheduleStatus } from "./snapshots";
 export async function getState(currency = "CNY") {
   return db.$transaction(
     async (tx) => {
@@ -119,6 +120,7 @@ export async function getState(currency = "CNY") {
         imports,
         fxRates,
         portfolio: p,
+        snapshotSchedule: await snapshotScheduleStatus(tx),
         summary: await wealthSummary(tx, currency, p),
       };
     },

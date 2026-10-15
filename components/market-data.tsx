@@ -67,7 +67,7 @@ export function MarketData() {
             {status
               ? status.configured
                 ? status.automatic
-                  ? `每日 ${status.time}（北京时间）`
+                  ? `每日 ${(status.times ?? [status.time]).join("、")}（北京时间）`
                   : "自动更新已暂停"
                 : "未配置密钥"
               : "读取中…"}

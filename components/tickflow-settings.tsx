@@ -11,6 +11,7 @@ type Draft = Settings & { apiKey: string };
 const fields = (s: MarketStatus): Draft => ({
   base: s.base,
   time: s.time,
+  times: s.times ?? [s.time],
   automatic: s.automatic,
   retryMinutes: s.retryMinutes,
   maxAttempts: s.maxAttempts,
@@ -135,17 +136,55 @@ export function TickFlowSettings() {
                     }
                   />
                 </label>
-                <label className="field">
-                  每日拉取时间（北京时间）
-                  <input
-                    type="time"
-                    required
-                    value={draft.time}
-                    onChange={(e) =>
-                      setDraft({ ...draft, time: e.target.value })
-                    }
-                  />
-                </label>
+                <div className="field wide">
+                  <span>每日拉取时间（北京时间）</span>
+                  <div className="actions">
+                    {draft.times.map((time, index) => (
+                      <div className="actions" key={index}>
+                        <label className="field">
+                          <span className="sr-only">拉取时间 {index + 1}</span>
+                          <input
+                            type="time"
+                            required
+                            value={time}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft,
+                                times: draft.times.map((t, i) =>
+                                  i === index ? e.target.value : t,
+                                ),
+                              })
+                            }
+                          />
+                        </label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          disabled={draft.times.length === 1}
+                          aria-label={`删除拉取时间 ${index + 1}`}
+                          onClick={() =>
+                            setDraft({
+                              ...draft,
+                              times: draft.times.filter((_, i) => i !== index),
+                            })
+                          }
+                        >
+                          删除
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={draft.times.length >= 24}
+                      onClick={() =>
+                        setDraft({ ...draft, times: [...draft.times, ""] })
+                      }
+                    >
+                      添加时间
+                    </Button>
+                  </div>
+                </div>
                 <label className="field">
                   服务节点
                   <select
@@ -313,7 +352,7 @@ export function TickFlowSettings() {
           <details className="calculation-notes">
             <summary>使用说明</summary>
             <p>
-              保存后生效，无需重启。服务运行时拉取行情，重启会补更。查询并添加资产后，再到资金流水录入账户与持仓。
+              保存后生效，无需重启。重复时间会合并并排序。服务运行时拉取行情，重启仅补最近到期时点。查询并添加资产后，再到资金流水录入账户与持仓。
             </p>
             <p>
               报价保留原始时间；较新的手动估值仍优先显示。密钥仅在本机保存，备份不包含密钥。

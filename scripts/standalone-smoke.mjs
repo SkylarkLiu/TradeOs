@@ -19,6 +19,7 @@ try {
     DATABASE_URL: `file:${path.join(folder, "check.db")}`,
     PORT: String(port),
     TICKFLOW_AUTO_SYNC: "false",
+    SNAPSHOT_AUTO_SAVE: "false",
     TICKFLOW_API_KEY: "",
   };
   execFileSync(

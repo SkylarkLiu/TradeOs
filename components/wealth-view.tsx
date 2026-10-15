@@ -864,7 +864,9 @@ export function WealthView({
           <div className="section-heading">
             <div>
               <h2>财富轨迹</h2>
-              <p className="detail">{snapshots.length} 个快照</p>
+              <p className="detail">
+                {snapshots.length} 个快照 · 每日 08:00 · CNY · 同日覆盖
+              </p>
             </div>
             <div
               className="segmented"
@@ -887,6 +889,11 @@ export function WealthView({
               ))}
             </div>
           </div>
+          {s.snapshotSchedule?.last?.error && (
+            <p className="error" role="status">
+              上次自动保存失败：{s.snapshotSchedule.last.error}
+            </p>
+          )}
           {snapshots.length ? (
             <>
               <Chart
