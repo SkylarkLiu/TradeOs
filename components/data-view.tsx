@@ -27,10 +27,7 @@ export function ReconciliationView() {
     [error, setError] = useState("");
   return (
     <>
-      <Heading
-        title="数据对账"
-        description="核对平台实际估值和系统账本；发现差异后单独记录调整，保留历史。"
-      />
+      <Heading title="数据对账" />
       <Form
         title="录入实际账户估值"
         action="reconcile.check"
@@ -169,10 +166,7 @@ export function SettingsView() {
     [busy, setBusy] = useState(false);
   return (
     <>
-      <Heading
-        title="设置与数据管理"
-        description="完整JSON备份包含账本、策略、回测和图片；恢复前预览，失败自动回滚。"
-      />
+      <Heading title="设置与数据管理" />
       <section className="panel">
         <h2>备份与恢复</h2>
         <div className="actions">
@@ -256,9 +250,13 @@ export function SettingsView() {
           </>
         )}
         {message && <p role="status">{message}</p>}
-        <p className="detail">
-          SQLite备份可在关闭服务后替换数据库文件；JSON恢复提供事务回滚和结构校验。备份文件保存在设备上，包含个人财务数据和附件。
-        </p>
+        <p className="detail">备份包含个人财务数据和附件，请妥善保存。</p>
+        <details className="calculation-notes">
+          <summary>备份说明</summary>
+          <p>
+            JSON包含账本、策略、回测和图片，恢复前校验，失败自动回滚。SQLite备份可在关闭服务后替换数据库文件。
+          </p>
+        </details>
       </section>
       <Form
         title="估值有效期"

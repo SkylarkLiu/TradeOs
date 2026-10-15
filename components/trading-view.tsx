@@ -73,10 +73,7 @@ export function TradingView({ path }: { path: string }) {
   if (path === "/trading/strategies")
     return (
       <>
-        <Heading
-          title="策略库"
-          description="先写规则，再验证；发布后规则与附件锁定，历史交易保留原版本。"
-        />
+        <Heading title="策略库" />
         <Form
           title="创建策略与首个草稿"
           action="strategy.create"
@@ -186,10 +183,7 @@ export function TradingView({ path }: { path: string }) {
   if (path === "/trading/plans")
     return (
       <>
-        <Heading
-          title="交易计划"
-          description="以止损风险确定参考仓位；不同合约使用对应的结算规则。"
-        />
+        <Heading title="交易计划" />
         <Form
           title="制定交易计划"
           action="plan.create"
@@ -310,10 +304,7 @@ export function TradingView({ path }: { path: string }) {
   if (path === "/trading/trades")
     return (
       <>
-        <Heading
-          title="交易日志"
-          description="记录真实决策与成交；每次成交同步资产账本，未关联计划标记UNPLANNED。"
-        />
+        <Heading title="交易日志" />
         <Form
           title="创建交易记录"
           action="trade.create"
@@ -401,10 +392,7 @@ export function TradingView({ path }: { path: string }) {
   if (path === "/trading/positions")
     return (
       <>
-        <Heading
-          title="当前持仓"
-          description="观察仓位、止损与资金敞口，所有调整保留事件历史。"
-        />
+        <Heading title="当前持仓" />
         <section className="panel">
           <Table
             rows={s.trades.filter(
@@ -527,7 +515,7 @@ export function TradingView({ path }: { path: string }) {
   const stats = tradeMetrics(s.trades);
   return (
     <>
-      <Heading title="交易总览" description="先看风险与执行，再看交易结果。" />
+      <Heading title="交易总览" />
       <Metrics
         items={[
           {

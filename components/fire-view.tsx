@@ -45,10 +45,7 @@ export function FireView({ forecast = false }: { forecast?: boolean }) {
   };
   return (
     <>
-      <Heading
-        title={forecast ? "财富预测" : "财务自由目标"}
-        description="让目标与实际资产连接，用可调整的假设观察资金缺口。"
-      />
+      <Heading title={forecast ? "财富预测" : "财务自由目标"} />
       {s.goals.length > 0 && (
         <label className="field">
           选择目标
@@ -71,9 +68,6 @@ export function FireView({ forecast = false }: { forecast?: boolean }) {
       )}
       {data && (
         <>
-          <div className="notice">
-            预测是假设，不是收益保证。费用、税费及实际市场波动不会自动计入假设收益；退休后生活费按通胀递增。
-          </div>
           {!data.complete && (
             <div className="notice">
               当前资产估值不完整，预测以已知估值小计计算，完成比例和所需投入暂不可用。
@@ -178,9 +172,6 @@ export function FireView({ forecast = false }: { forecast?: boolean }) {
                 },
               ]}
             />
-            <p className="detail">
-              以上使用固定假设收益，不包含收益顺序风险；若资产不足，短缺月份以数学模拟为准。
-            </p>
           </section>
           <section className="panel">
             <h2>退休后名义资产模拟</h2>
@@ -273,12 +264,18 @@ export function FireView({ forecast = false }: { forecast?: boolean }) {
           },
         ]}
       />
-      <p className="detail">
-        自住房默认排除，可在资产目录调整“纳入FIRE”。新增投入按每月末的固定名义金额计算。
-        {data?.progress && D(data.progress).lt(0)
-          ? "当前可投资净资产为负，需先处理负债。"
-          : ""}
-      </p>
+      {data?.progress && D(data.progress).lt(0) && (
+        <p className="notice">当前可投资净资产为负，需先处理负债。</p>
+      )}
+      <details className="calculation-notes">
+        <summary>计算口径</summary>
+        <p>
+          自住房默认排除，可在资产目录调整“纳入FIRE”。新增投入按每月末的固定名义金额计算，退休后生活费按通胀递增。
+        </p>
+        <p>
+          固定收益假设不包含费用、税费、市场波动与收益顺序风险；预测不代表收益保证，短缺月份以数学模拟为准。
+        </p>
+      </details>
     </>
   );
 }

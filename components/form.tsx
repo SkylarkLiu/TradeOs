@@ -61,6 +61,7 @@ export function Form({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<{ message: string } | null>(null),
     [success, setSuccess] = useState(""),
+    [helpOpen, setHelpOpen] = useState<Record<string, boolean>>({}),
     [values, setValues] = useState<Record<string, string>>({});
   const formId = useId(),
     submitting = useRef(false),
@@ -71,17 +72,8 @@ export function Form({
   return (
     <section className="panel" id={id}>
       <h2 id={`${formId}-title`}>{title}</h2>
-      <p className="form-hint" id={`${formId}-hint`}>
-        标有 * 的字段为必填；其他字段按说明填写。
-        {retain.length > 0 &&
-          `保存后保留${fields
-            .filter((f) => retain.includes(f.name))
-            .map((f) => f.label)
-            .join("、")}，其余内容重置。`}
-      </p>
       <form
         aria-labelledby={`${formId}-title`}
-        aria-describedby={`${formId}-hint`}
         aria-busy={busy}
         onChange={(e) => {
           setSuccess("");
@@ -132,7 +124,13 @@ export function Form({
                 field.value = String(fd.get(name) ?? "");
             }
             setValues({});
-            setSuccess(submit === "保存" ? "保存成功。" : `${submit}成功。`);
+            const retained = fields
+              .filter((f) => retain.includes(f.name))
+              .map((f) => f.label)
+              .join("、");
+            setSuccess(
+              `${submit === "保存" ? "保存成功。" : `${submit}成功。`}${retained ? `已保留${retained}。` : ""}`,
+            );
             onDone();
           } catch (e) {
             setError({ message: e instanceof Error ? e.message : "保存失败" });
@@ -147,6 +145,7 @@ export function Form({
             {fields.map((f) => {
               const fieldId = `${formId}-${f.name}`,
                 helpId = f.help ? `${fieldId}-help` : undefined,
+                describedBy = helpOpen[f.name] ? helpId : undefined,
                 requirement =
                   /可选|选填|必选|必填|留空/.test(f.label) ||
                   f.type === "checkbox"
@@ -163,12 +162,28 @@ export function Form({
                         {requirement}
                       </span>
                     )}
+                    {f.help && (
+                      <details
+                        className="field-help"
+                        open={helpOpen[f.name] ?? false}
+                        onToggle={(event) => {
+                          const open = event.currentTarget.open;
+                          setHelpOpen((previous) => ({
+                            ...previous,
+                            [f.name]: open,
+                          }));
+                        }}
+                      >
+                        <summary aria-label={`${f.label}说明`}>说明</summary>
+                        <small id={helpId}>{f.help}</small>
+                      </details>
+                    )}
                   </div>
                   {f.options ? (
                     <select
                       id={fieldId}
                       name={f.name}
-                      aria-describedby={helpId}
+                      aria-describedby={describedBy}
                       defaultValue={f.value ?? ""}
                       required={!f.optional}
                     >
@@ -183,7 +198,7 @@ export function Form({
                     <textarea
                       id={fieldId}
                       name={f.name}
-                      aria-describedby={helpId}
+                      aria-describedby={describedBy}
                       defaultValue={f.value}
                       required={!f.optional}
                     />
@@ -192,14 +207,14 @@ export function Form({
                       type="checkbox"
                       id={fieldId}
                       name={f.name}
-                      aria-describedby={helpId}
+                      aria-describedby={describedBy}
                       defaultChecked={f.value === "true"}
                     />
                   ) : (
                     <input
                       id={fieldId}
                       name={f.name}
-                      aria-describedby={helpId}
+                      aria-describedby={describedBy}
                       type={
                         f.type === "integer" ? "number" : (f.type ?? "text")
                       }
@@ -212,7 +227,6 @@ export function Form({
                       required={!f.optional}
                     />
                   )}
-                  {f.help && <small id={helpId}>{f.help}</small>}
                 </div>
               );
             })}

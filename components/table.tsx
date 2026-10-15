@@ -163,9 +163,7 @@ export function Table<T>({
         {!filtered.length && (
           <div className="empty">
             <strong>{query.trim() ? "没有匹配的记录" : empty}</strong>
-            {query.trim()
-              ? "试试其他关键词，或清除搜索查看全部记录。"
-              : "记录将随账本更新显示在这里。"}
+            {query.trim() && "试试其他关键词，或清除搜索查看全部记录。"}
             {query.trim() && (
               <div className="form-actions empty-actions">
                 <Button

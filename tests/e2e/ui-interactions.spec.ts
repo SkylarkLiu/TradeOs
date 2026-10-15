@@ -56,13 +56,11 @@ test("报表筛选需应用，口径分组、日期校验和切币种保留条�
     if (r.url().includes("/api/analytics?")) requests++;
   });
   await page.goto("/trading/analytics");
-  await expect(page.locator(".report-scope")).toBeVisible();
+  await expect(page.locator(".report-definitions > summary")).toBeVisible();
   const initial = requests;
   await page.getByText("更多交易筛选", { exact: true }).click();
   await page.getByLabel("交易标签", { exact: true }).fill("界面验收标签");
-  await expect(
-    page.getByText("筛选已修改，点击“应用筛选”后更新报表。"),
-  ).toBeVisible();
+  await expect(page.getByText("筛选未应用", { exact: true })).toBeVisible();
   expect(requests).toBe(initial);
   await expect(page.locator(".report-filter-summary")).not.toContainText(
     "界面验收标签",
@@ -71,13 +69,16 @@ test("报表筛选需应用，口径分组、日期校验和切币种保留条�
   await expect(page.locator(".report-filter-summary")).toContainText(
     "交易标签：界面验收标签",
   );
-  await expect(page.locator(".report-scope")).toBeVisible();
+  await expect(page.locator(".report-definitions > summary")).toBeVisible();
   await page.getByRole("tab", { name: "账户收益", exact: true }).click();
   await expect(page.getByRole("tabpanel", { name: "账户收益" })).toContainText(
     "账户TWR",
   );
-  await expect(page.getByRole("tabpanel", { name: "账户收益" })).toContainText(
-    "更多交易筛选不影响此报表",
+  const definitions = page.locator(".report-definitions");
+  await expect(definitions).not.toHaveAttribute("open", "");
+  await definitions.locator("summary").click();
+  await expect(definitions).toContainText(
+    "账户收益和增长来源只按账户与日期统计",
   );
   await page.getByLabel("开始日期", { exact: true }).fill("2026-10-10");
   await page.getByLabel("结束日期", { exact: true }).fill("2026-10-01");
@@ -131,8 +132,58 @@ test("报表加载失败能重试，旧范围不伪装成新报表", async ({ pa
   );
   failing = false;
   await page.getByRole("button", { name: "重试加载报表" }).click();
-  await expect(page.locator(".report-scope")).toBeVisible();
+  await expect(page.locator(".report-definitions > summary")).toBeVisible();
   await expect(page.locator("#main-content").getByRole("alert")).toHaveCount(0);
+});
+
+test("报表与表单按需显示说明，默认简洁且标签仍能聚焦输入", async ({ page }) => {
+  await page.goto("/trading/analytics");
+  const definitions = page.locator(".report-definitions");
+  await expect(definitions.locator("summary")).toBeVisible();
+  await expect(page.locator(".page-heading .subtitle")).toHaveCount(0);
+  await expect(
+    page.getByText("报表使用下方已应用范围。", { exact: true }),
+  ).toHaveCount(0);
+  const intervalHelp = definitions.getByText(/月度收益不代表完整自然月收益/);
+  await expect(intervalHelp).not.toBeVisible();
+  await definitions.locator("summary").click();
+  await expect(intervalHelp).toBeVisible();
+  await definitions.locator("summary").click();
+  await expect(intervalHelp).not.toBeVisible();
+
+  await page.getByRole("tab", { name: "账户收益", exact: true }).click();
+  const metricHelp = page.getByLabel("账户TWR说明", { exact: true });
+  const metricDefinition = page.getByText("剔除资金流影响的区间收益率", {
+    exact: true,
+  });
+  await expect(page.getByText("账户TWR", { exact: true })).toBeVisible();
+  await expect(metricHelp).toBeVisible();
+  await expect(metricDefinition).not.toBeVisible();
+  await metricHelp.click();
+  await expect(metricDefinition).toBeVisible();
+  await metricHelp.click();
+  await expect(metricDefinition).not.toBeVisible();
+
+  await page.goto("/wealth/assets");
+  const form = page.getByRole("form", { name: "登记资产", exact: true });
+  const code = form.getByLabel("唯一代码", { exact: true });
+  const fieldHelp = form.getByLabel("唯一代码说明", { exact: true });
+  const fieldDefinition = form.getByText(
+    "建议带市场，如NASDAQ:AAPL；现金自动使用CASH:币种",
+    { exact: true },
+  );
+  await expect(fieldDefinition).not.toBeVisible();
+  await expect(code).not.toHaveAttribute("aria-describedby", /.+/);
+  await fieldHelp.click();
+  await expect(fieldDefinition).toBeVisible();
+  await expect(code).toHaveAttribute("aria-describedby", /.+/);
+  await form.getByText("唯一代码", { exact: true }).click();
+  await expect(code).toBeFocused();
+  await code.fill("UI:HELP");
+  await fieldHelp.click();
+  await expect(fieldDefinition).not.toBeVisible();
+  await expect(code).not.toHaveAttribute("aria-describedby", /.+/);
+  await expect(code).toHaveValue("UI:HELP");
 });
 
 test("表单保存锁定输入并防重复，成功反馈清晰", async ({ page }) => {
@@ -230,7 +281,7 @@ test("总览区分不完整估值，图表保留缺口与快照具体时间", as
   await expect(page.getByText("当前估值不完整", { exact: true })).toBeVisible();
   await expect(page.getByText(/请核对负债、在途及合约/)).toBeVisible();
   const trend = page.locator("#wealth-trend");
-  await trend.getByText("查看图表数据 · CNY", { exact: true }).click();
+  await trend.getByText("图表数据", { exact: true }).click();
   const data = trend.getByRole("region", { name: "财富轨迹数据", exact: true });
   await expect(
     data.getByRole("cell", { name: "数据不足", exact: true }),

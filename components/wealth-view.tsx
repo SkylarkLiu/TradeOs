@@ -4,6 +4,8 @@ import { useState } from "react";
 import {
   ArrowRight,
   ChevronDown,
+  ChevronRight,
+  CircleHelp,
   CircleCheck,
   CircleAlert,
 } from "lucide-react";
@@ -18,19 +20,14 @@ import { Importer } from "./importer";
 import { AnalysisView } from "./analysis-view";
 export function Heading({
   title,
-  description,
   children,
 }: {
   title: string;
-  description: string;
   children?: React.ReactNode;
 }) {
   return (
     <div className="page-heading">
-      <div>
-        <h1>{title}</h1>
-        <p className="subtitle">{description}</p>
-      </div>
+      <h1>{title}</h1>
       {children}
     </div>
   );
@@ -54,18 +51,30 @@ export function Metrics({
     >
       {items.map((i) => (
         <div className="metric" key={i.label}>
-          <div className="metric-label">{i.label}</div>
+          {i.note ? (
+            <details className="metric-definition">
+              <summary className="metric-label" aria-label={`${i.label}说明`}>
+                {i.label} <CircleHelp size={13} aria-hidden="true" />
+              </summary>
+              <p className="metric-note">{i.note}</p>
+            </details>
+          ) : (
+            <div className="metric-label">{i.label}</div>
+          )}
           <div className={`metric-value ${signedClass(i.signed)}`}>
             {i.href ? (
               <Link href={i.href} aria-label={`${i.label}，查看明细`}>
                 {i.value}
-                <span className="metric-link-hint">查看明细</span>
+                <ChevronRight
+                  className="metric-detail-icon"
+                  size={14}
+                  aria-hidden="true"
+                />
               </Link>
             ) : (
               i.value
             )}
           </div>
-          {i.note && <div className="metric-note">{i.note}</div>}
         </div>
       ))}
     </div>
@@ -128,10 +137,7 @@ export function WealthView({
   if (path === "/wealth/platforms" || path === "/wealth/accounts")
     return (
       <>
-        <Heading
-          title="平台与账户"
-          description="将银行、券商和交易平台统一纳入本地账本。"
-        />
+        <Heading title="平台与账户" />
         <div className="equal-col">
           <Form
             title="创建平台"
@@ -226,10 +232,7 @@ export function WealthView({
   if (path === "/wealth/assets")
     return (
       <>
-        <Heading
-          title="资产明细"
-          description="同一资产跨平台合并统计；账户持仓分别保留。"
-        />
+        <Heading title="资产明细" />
         <Form
           title="登记资产"
           action="asset.create"
@@ -352,10 +355,7 @@ export function WealthView({
   if (path === "/wealth/transactions")
     return (
       <>
-        <Heading
-          title="资金流水"
-          description="外部资金、投资收益与内部转账分别记录，账本可追踪。"
-        />
+        <Heading title="资金流水" />
         <Form
           title="录入流水 / 期初余额"
           retain={["accountId", "assetId"]}
@@ -481,10 +481,7 @@ export function WealthView({
   if (path === "/wealth/transfers")
     return (
       <>
-        <Heading
-          title="内部转账"
-          description="转出、在途与到账是一笔转账的不同状态，费用单独计入。"
-        />
+        <Heading title="内部转账" />
         <Form
           title="记录转出"
           action="transfer.create"
@@ -540,10 +537,7 @@ export function WealthView({
   if (path === "/wealth/allocation")
     return (
       <>
-        <Heading
-          title="资产配置"
-          description="从资产类别、平台和币种检查资金分布。"
-        />
+        <Heading title="资产配置" />
         <div className="equal-col">
           {[
             ["资产类别", p.allocation],
@@ -586,10 +580,7 @@ export function WealthView({
   if (path === "/wealth/history")
     return (
       <>
-        <Heading
-          title="历史表现"
-          description="保存完整估值快照，建立可核对的长期资产历史。"
-        >
+        <Heading title="历史表现">
           <Action
             action="snapshot.create"
             input={{ currency: report }}
@@ -681,10 +672,7 @@ export function WealthView({
   if (path === "/settings")
     return (
       <>
-        <Heading
-          title="设置与数据管理"
-          description="本地数据可迁移；导入前先核对，关键操作保留审计。"
-        />
+        <Heading title="设置与数据管理" />
         <Importer refresh={refresh} />
         <section className="panel">
           <h2>审计记录</h2>
@@ -702,10 +690,7 @@ export function WealthView({
     );
   return (
     <>
-      <Heading
-        title="总资产"
-        description="先看净资产，再查看收益、风险与资金分布。"
-      >
+      <Heading title="总资产">
         <div className="actions">
           <Link href="/wealth/transactions" className="button primary">
             录入资金 <ArrowRight size={15} aria-hidden="true" />
@@ -729,7 +714,7 @@ export function WealthView({
           <strong>{p.complete ? "当前估值完整" : "当前估值不完整"}</strong>
           <span>
             {p.complete
-              ? `${p.rows.length} 项账户持仓 · ${p.inTransit} 笔在途`
+              ? `${p.rows.length} 项持仓${p.inTransit ? ` · ${p.inTransit} 笔在途` : ""}`
               : missing || stale
                 ? `账户持仓中 ${missing} 项缺失、${stale} 项价格过期；金额为已知估值。`
                 : "请核对负债、在途及合约的价格与汇率；已知估值不能代表完整净资产。"}
@@ -759,12 +744,11 @@ export function WealthView({
             label: p.complete ? "总资产" : "已知资产估值",
             href: "/wealth/assets",
             value: amount(p.assets, report),
-            note: `含 ${p.inTransit} 笔在途转账`,
+            note: p.inTransit ? `含 ${p.inTransit} 笔在途转账` : undefined,
           },
           {
             label: p.complete ? "总负债" : "已知负债估值",
             value: amount(p.liabilities, report),
-            note: "借款、信用与其他负债",
             href: "#liabilities",
           },
           {
@@ -808,9 +792,7 @@ export function WealthView({
       />
       <details className="risk-details">
         <summary>
-          <span>
-            风险与目标 <small>净资产峰值、回撤与财务自由进度</small>
-          </span>
+          <span>风险与目标</span>
           <ChevronDown size={16} aria-hidden="true" />
         </summary>
         <Metrics
@@ -841,9 +823,7 @@ export function WealthView({
           <div className="section-heading">
             <div>
               <h2>财富轨迹</h2>
-              <p className="detail">
-                已保存快照 · {report} · {snapshots.length} 个时点
-              </p>
+              <p className="detail">{snapshots.length} 个快照</p>
             </div>
             <div
               className="segmented"
@@ -886,8 +866,8 @@ export function WealthView({
                 ]}
               />
               <p className="chart-caption">
-                {day(snapshots[0].at)} 至 {day(snapshots.at(-1)!.at)} ·
-                时间范围仅影响此图；连线表示快照变化，未完整估值的时点留空。
+                {day(snapshots[0].at)} 至 {day(snapshots.at(-1)!.at)}
+                {snapshots.some((v) => !v.complete) && " · 不完整估值已留空"}
               </p>
             </>
           ) : (
@@ -895,9 +875,7 @@ export function WealthView({
               <strong>
                 {range === "all" ? "从第一笔资产开始" : "所选范围还没有快照"}
               </strong>
-              {range === "all"
-                ? "创建平台与账户，录入余额并更新价格，再保存估值快照。"
-                : "查看全部已保存快照，或补充这段时间的历史估值。"}
+              {range === "all" ? "录入资产后保存快照。" : "可查看全部快照。"}
               <div className="form-actions empty-actions">
                 {range === "all" ? (
                   <>
@@ -924,9 +902,7 @@ export function WealthView({
           <div className="section-heading">
             <div>
               <h2>资产分布</h2>
-              <p className="detail">
-                {p.complete ? "当前资产" : "已知估值部分"} · {report}
-              </p>
+              {!p.complete && <p className="detail">已知估值</p>}
             </div>
             <Link className="text-action" href="/wealth/allocation">
               配置明细 <ArrowRight size={14} aria-hidden="true" />
@@ -937,19 +913,15 @@ export function WealthView({
           ) : (
             <div className="empty">暂无可估值的正值资产</div>
           )}
-          <p className="chart-caption">
-            仅展示正值资产分类，负债单独统计；金额以明细为准。
-          </p>
+          <details className="calculation-notes">
+            <summary>统计口径</summary>
+            <p>仅展示正值资产分类，负债单独统计。</p>
+          </details>
         </section>
       </div>
       <section className="panel">
         <div className="section-heading">
-          <div>
-            <h2>账户资产</h2>
-            <p className="detail">
-              保留原币成本与报告币种市值，点击资产可追踪对应流水。
-            </p>
-          </div>
+          <h2>账户资产</h2>
           <Link className="text-action" href="/wealth/assets">
             管理资产 <ArrowRight size={14} aria-hidden="true" />
           </Link>
@@ -958,13 +930,7 @@ export function WealthView({
       </section>
       <section className="panel" id="liabilities">
         <div className="section-heading">
-          <div>
-            <h2>负债明细</h2>
-            <p className="detail">
-              负债以原币展示，折算后的已知合计为 {amount(p.liabilities, report)}
-              。
-            </p>
-          </div>
+          <h2>负债明细</h2>
           <span className="badge">{s.liabilities.length} 项负债</span>
         </div>
         <Table

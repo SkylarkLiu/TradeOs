@@ -20,10 +20,7 @@ export function ReviewView() {
     ) as typeof defaultScoreRules;
   return (
     <>
-      <Heading
-        title="交易复盘"
-        description="评价规则、风险与执行，不用盈利或亏损替代交易质量。"
-      />
+      <Heading title="交易复盘" />
       <Form
         title="写下复盘"
         action="review.create"
@@ -330,28 +327,16 @@ export function AnalysisView({ wealth = false }: { wealth?: boolean }) {
     dateRange =
       applied.start || applied.end
         ? `${applied.start ?? "最早记录"} 至 ${applied.end ?? "最新记录"}`
-        : "全部已记录日期",
-    tradeOnlyFilters = [
-      "assetId",
-      "strategyId",
-      "strategyVersionId",
-      "direction",
-      "environment",
-      "tag",
-    ].some((key) => applied[key]);
+        : "全部已记录日期";
 
   return (
     <>
       {wealth ? (
         <div className="report-section-heading">
           <h2>资产收益分析</h2>
-          <p className="detail">分开查看交易表现、账户收益与资产增长来源。</p>
         </div>
       ) : (
-        <Heading
-          title="绩效分析"
-          description="先确定范围，再分别查看交易表现、账户收益与增长来源。"
-        >
+        <Heading title="绩效分析">
           <Button
             variant="outline"
             disabled={loading}
@@ -378,7 +363,6 @@ export function AnalysisView({ wealth = false }: { wealth?: boolean }) {
       >
         <div className="report-filter-heading">
           <h2>筛选范围</h2>
-          <span className="detail">日期按北京时间，交易按平仓日期筛选</span>
         </div>
         <div className="form-grid">
           {selectField(fields[0])}
@@ -434,9 +418,6 @@ export function AnalysisView({ wealth = false }: { wealth?: boolean }) {
               </label>
             ))}
           </div>
-          <p className="detail">
-            资产、策略、版本、方向、环境和标签只筛选已平仓交易；账户收益和增长来源只按账户与日期统计。
-          </p>
         </details>
         <div className="report-filter-actions">
           <div className="actions">
@@ -466,11 +447,11 @@ export function AnalysisView({ wealth = false }: { wealth?: boolean }) {
               </Button>
             )}
           </div>
-          <span className="detail" role="status">
-            {dirty
-              ? "筛选已修改，点击“应用筛选”后更新报表。"
-              : "报表使用下方已应用范围。"}
-          </span>
+          {dirty && (
+            <span className="detail" role="status">
+              筛选未应用
+            </span>
+          )}
         </div>
         {formError && (
           <p className="error" role="alert" id={`${id}-filter-error`}>
@@ -566,47 +547,23 @@ export function AnalysisView({ wealth = false }: { wealth?: boolean }) {
         )}
         {result && (
           <>
-            <div className="report-scope">
-              <p className="detail">
-                {tab === "trades"
-                  ? `交易口径：${result.totalClosed} 笔已平仓交易，${result.metrics.count} 笔可按 ${result.currency} 统计。`
-                  : `账户口径：${accountName} · ${dateRange}；币种 ${result.currency}。${tradeOnlyFilters ? "更多交易筛选不影响此报表。" : ""}`}
-              </p>
-              <span className="detail">
-                最近生成 {when(current!.fetchedAt)}
-              </span>
-            </div>
             {tab === "trades" && (
               <>
                 {result.missingFx > 0 && (
                   <div className="notice">
-                    {result.missingFx} 笔交易缺少平仓时的历史汇率，未计入{" "}
-                    {result.currency}{" "}
-                    交易指标及策略对比。规则遵守率仍覆盖当前范围内已复盘交易。
+                    {result.missingFx} 笔交易缺少历史汇率，未计入{" "}
+                    {result.currency} 统计。
+                    <Link className="button outline" href="/wealth/assets">
+                      维护历史汇率
+                    </Link>
                   </div>
                 )}
-                {result.metrics.count === 0 && (
+                {result.totalClosed === 0 && (
                   <div className="notice">
-                    <strong>
-                      {result.totalClosed
-                        ? "当前交易缺少可换算的历史汇率"
-                        : "当前范围没有已平仓交易"}
-                    </strong>
-                    <p className="detail">
-                      {result.totalClosed
-                        ? "补充平仓日期可用的历史汇率后，再刷新报表。"
-                        : "先录入开仓与平仓成交，或调整筛选范围。未平仓持仓不纳入交易表现。"}
-                    </p>
-                    <div className="report-empty-actions">
-                      <Link
-                        className="button outline"
-                        href={
-                          result.totalClosed ? "/wealth/assets" : "/trading/log"
-                        }
-                      >
-                        {result.totalClosed ? "维护历史汇率" : "查看交易日志"}
-                      </Link>
-                    </div>
+                    当前范围没有已平仓交易。
+                    <Link className="button outline" href="/trading/log">
+                      查看交易日志
+                    </Link>
                   </div>
                 )}
                 <Metrics
@@ -655,16 +612,12 @@ export function AnalysisView({ wealth = false }: { wealth?: boolean }) {
                         result.metrics.averageHoldingHours !== null
                           ? `${D(result.metrics.averageHoldingHours).toFixed(1)} 小时`
                           : "数据不足",
-                      note: "从开仓到平仓",
                     },
                   ]}
                 />
                 <section className="panel">
                   <div className="report-section-heading">
                     <h2>策略版本对比</h2>
-                    <p className="detail">
-                      已平仓交易 · 金额 {result.currency} · 已扣成交费用
-                    </p>
                   </div>
                   <Table
                     rows={result.byStrategy}
@@ -765,18 +718,14 @@ export function AnalysisView({ wealth = false }: { wealth?: boolean }) {
                     </Link>
                   </div>
                 )}
-                <p className="detail">
-                  {result.account.from
-                    ? `实际估值覆盖 ${day(result.account.from)} 至 ${day(result.account.to!)}，共 ${result.curve.length} 次记录。`
-                    : "当前范围尚无可换算的历史估值。"}{" "}
-                  图表与收益只反映已录入的区间。
-                </p>
                 <div className="equal-col">
                   <section className="panel">
                     <h2>账户资产轨迹</h2>
-                    <p className="detail">
-                      历史估值 · {result.currency} · 包含资金流带来的资产变化
-                    </p>
+                    {result.account.from && (
+                      <p className="detail">
+                        {day(result.account.from)} 至 {day(result.account.to!)}
+                      </p>
+                    )}
                     <Chart
                       title="账户资产轨迹"
                       unit={result.currency}
@@ -790,10 +739,9 @@ export function AnalysisView({ wealth = false }: { wealth?: boolean }) {
                     />
                   </section>
                   <section className="panel">
-                    <h2>月度收益 · 已记录区间</h2>
-                    <p className="detail">单位 % · 不代表完整自然月收益</p>
+                    <h2>月度收益</h2>
                     <Chart
-                      title="月度收益 · 已记录区间"
+                      title="月度收益"
                       unit="%"
                       type="bar"
                       labels={result.monthly.map((r) => r.month)}
@@ -808,9 +756,6 @@ export function AnalysisView({ wealth = false }: { wealth?: boolean }) {
                         },
                       ]}
                     />
-                    <p className="detail">
-                      仅覆盖已录入的估值区间，不能视为完整自然月收益。
-                    </p>
                   </section>
                 </div>
               </>
@@ -819,18 +764,17 @@ export function AnalysisView({ wealth = false }: { wealth?: boolean }) {
               <section className="panel">
                 <div className="report-section-heading">
                   <h2>资产增长来源</h2>
-                  <p className="detail">
-                    {result.account.from
-                      ? `${day(result.account.from)} 至 ${day(result.account.to!)}`
-                      : "需要至少两次有效估值"}{" "}
-                    · 金额 {result.currency}
-                  </p>
+                  {result.account.from && (
+                    <p className="detail">
+                      {day(result.account.from)} 至 {day(result.account.to!)}
+                    </p>
+                  )}
                 </div>
                 {Object.values(result.attribution).some(
                   (value) => value === null,
                 ) && (
                   <p className="notice">
-                    部分来源暂无法计算。请补充估值、资金流与历史汇率；“数据不足”不代表金额为零。
+                    部分来源数据不足，请补充估值、资金流或汇率。
                   </p>
                 )}
                 <Table
@@ -859,12 +803,32 @@ export function AnalysisView({ wealth = false }: { wealth?: boolean }) {
                     },
                   ]}
                 />
-                <p className="detail">
-                  汇率贡献按汇率更新前持仓及更新时价格计算，价格与汇率同时变化时先归价格、再归汇率；合约或历史资料不足时保留未分类金额。以上
-                  Trading 结果已扣成交费用。
-                </p>
               </section>
             )}
+            <details className="report-definitions">
+              <summary>统计口径</summary>
+              <dl>
+                <dt>筛选范围</dt>
+                <dd>
+                  日期按北京时间，交易按平仓日期筛选。更多交易筛选只影响已平仓交易；账户收益和增长来源只按账户与日期统计。
+                </dd>
+                <dt>交易表现</dt>
+                <dd>
+                  {result.totalClosed} 笔已平仓交易，{result.metrics.count}{" "}
+                  笔可按 {result.currency}{" "}
+                  统计；交易及策略净收益已扣成交费用。规则遵守率覆盖当前范围全部已复盘交易。
+                </dd>
+                <dt>账户收益</dt>
+                <dd>
+                  资产轨迹包含资金流带来的变化；收益只反映已录入的有效估值区间。月度收益不代表完整自然月收益。
+                </dd>
+                <dt>增长来源</dt>
+                <dd>
+                  汇率贡献按汇率更新前持仓及更新时价格计算；价格与汇率同时变化时先归价格、再归汇率。合约或历史资料不足时保留未分类金额；Trading
+                  结果已扣成交费用。“数据不足”不代表金额为零。
+                </dd>
+              </dl>
+            </details>
           </>
         )}
       </section>

@@ -149,13 +149,10 @@ export function Workspace({
     >
       <div className="workspace-toolbar">
         <div className="workspace-summary">
-          <span className="detail">
-            统一账本 · {state.accounts.length} 个账户
-          </span>
+          <span className="detail">{state.accounts.length} 个账户</span>
           {state.settings.find((s) => s.key === "demo")?.value === "true" && (
             <span className="demo-label">演示账本</span>
           )}
-          <span className="detail">读取于 {readAt}</span>
         </div>
         <div className="workspace-controls">
           <label className="field">
@@ -173,6 +170,7 @@ export function Workspace({
           <Button
             variant="ghost"
             aria-label="刷新账本"
+            title={`上次读取 ${readAt}`}
             disabled={loading}
             onClick={refresh}
           >

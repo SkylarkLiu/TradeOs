@@ -85,10 +85,8 @@ export function BacktestView() {
     );
   return (
     <>
-      <Heading
-        title="手动历史回测"
-        description="逐根观察、手动决策。模拟资金独立存储，上一根会创建保留历史的新分支。"
-      />
+      <Heading title="手动历史回测" />
+      <p className="detail">模拟回测 · 不计入真实账本</p>
       <Form
         title="创建回测任务"
         action="backtest.create"

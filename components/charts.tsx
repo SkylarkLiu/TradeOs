@@ -169,7 +169,7 @@ export function Chart({
         open={showData}
         onToggle={(e) => setShowData(e.currentTarget.open)}
       >
-        <summary>查看图表数据{unit ? ` · ${unit}` : ""}</summary>
+        <summary>图表数据</summary>
         {showData && (
           <div
             className="table-scroll"
